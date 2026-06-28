@@ -53,6 +53,11 @@ on:
         required: false
         default: true
         type: boolean
+      security-paths:
+        description: "Paths passed to bandit -r"
+        required: false
+        default: "."
+        type: string
       has-ha-validate:
         required: false
         default: false
@@ -544,7 +549,7 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
       - run: pip install bandit pip-audit
-      - run: bandit -r . -ll -f json -o bandit-report.json
+      - run: bandit -r ${{ inputs.security-paths }} -ll -f json -o bandit-report.json
       - run: pip-audit --format json --output pip-audit.json || true
       - uses: actions/upload-artifact@v7
         if: always()
