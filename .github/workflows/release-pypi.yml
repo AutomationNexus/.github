@@ -1,0 +1,135 @@
+name: Release (PyPI)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        required: false
+        default: '["ubuntu-latest"]'
+      has-frontend:
+        required: false
+        default: false
+        type: boolean
+      spa-artifact-path:
+        required: false
+        default: ""
+      node-version:
+        required: false
+        default: "24"
+      python-version:
+        required: false
+        default: "3.11"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  prepare:
+    name: Prepare Release Tag
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      event_kind: ${{ steps.resolve.outputs.event_kind }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Resolve tag
+        id: resolve
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"; KIND="dispatch"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"; KIND="tag_push"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            git fetch origin --tags
+            LATEST=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1 | sed -E 's/^(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            LATEST=${LATEST:-v0.0.0}
+            MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
+            MINOR=$(echo "$LATEST" | cut -d. -f2)
+            PATCH=$(echo "$LATEST" | cut -d. -f3)
+            MSG="${{ github.event.head_commit.message }}"
+            if echo "$MSG" | grep -qiE '\[major\]|major release|breaking'; then
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+            elif echo "$MSG" | grep -qiE '\[minor\]|minor release|feature'; then
+              MINOR=$((MINOR + 1)); PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+            TAG="v${MAJOR}.${MINOR}.${PATCH}"
+            KIND="main_push"
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              git tag -a "$TAG" -m "${MSG:0:72}"
+              git push origin "$TAG"
+            fi
+          else
+            echo "Unsupported trigger"; exit 1
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "event_kind=$KIND" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    if: inputs.has-frontend
+    name: Frontend
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci && npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+          retention-days: 1
+
+  publish:
+    name: Publish to PyPI
+    needs: [prepare, frontend]
+    # OIDC trusted publishing requires GitHub-hosted runner
+    runs-on: ubuntu-24.04
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - run: |
+          pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: GitHub Release
+    needs: [prepare, publish]
+    if: always() && needs.publish.result == 'success'
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: Release ${{ needs.prepare.outputs.tag_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

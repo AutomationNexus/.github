@@ -1,0 +1,36 @@
+name: Semgrep
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v6
+      - run: |
+          semgrep scan \
+            --config=p/security-audit \
+            --config=p/secrets \
+            --json --output=semgrep-report.json \
+            --metrics=off || true
+      - name: Summarize findings
+        if: always()
+        run: |
+          if [ ! -s semgrep-report.json ]; then echo "No report."; exit 0; fi
+          ERRORS=$(jq '[.results[]? | select(.extra.severity=="ERROR")] | length' semgrep-report.json 2>/dev/null || echo 0)
+          WARNINGS=$(jq '[.results[]? | select(.extra.severity=="WARNING")] | length' semgrep-report.json 2>/dev/null || echo 0)
+          echo "Semgrep — ERROR: $ERRORS  WARNING: $WARNINGS"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: semgrep-report-${{ github.run_id }}
+          path: semgrep-report.json
+          retention-days: 1

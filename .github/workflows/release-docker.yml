@@ -1,0 +1,199 @@
+name: Release (Docker)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        required: false
+        default: '["ubuntu-latest"]'
+      publish-runner:
+        required: false
+        default: '["ubuntu-latest"]'
+      image-name:
+        required: true
+        type: string
+      platforms:
+        required: false
+        default: "linux/amd64,linux/arm64"
+      has-frontend:
+        required: false
+        default: false
+        type: boolean
+      has-validation:
+        required: false
+        default: true
+        type: boolean
+      spa-artifact-path:
+        required: false
+        default: ""
+      node-version:
+        required: false
+        default: "24"
+      python-version:
+        required: false
+        default: "3.11"
+      coverage-threshold:
+        required: false
+        default: 90
+        type: number
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  prepare:
+    name: Prepare Release Tag
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      event_kind: ${{ steps.resolve.outputs.event_kind }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Resolve tag
+        id: resolve
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+            KIND="dispatch"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            KIND="tag_push"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            TAG="v${VERSION}"
+            KIND="main_push"
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              git tag -a "$TAG" -m "Release $TAG"
+              git push origin "$TAG"
+            fi
+          else
+            echo "Unsupported trigger: ${{ github.event_name }} ${{ github.ref }}"
+            exit 1
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "event_kind=$KIND" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    if: inputs.has-frontend
+    name: Frontend (release)
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+          retention-days: 1
+
+  build-and-push:
+    name: Build & Push
+    runs-on: ${{ fromJSON(inputs.publish-runner) }}
+    # Always build (tag_push, dispatch, main_push → validation already passed)
+    if: |
+      !cancelled() && (
+        inputs.has-validation == false ||
+        needs.prepare.result == 'success'
+      )
+    needs: [prepare, frontend]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ inputs.image-name }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.tag_name }}
+            type=semver,pattern={{major}},value=${{ needs.prepare.outputs.tag_name }}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: ${{ inputs.platforms }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+
+  container-scan:
+    name: Container Scan
+    needs: [prepare, build-and-push]
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    continue-on-error: true
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ inputs.image-name }}:${{ needs.prepare.outputs.tag_name }}
+          format: json
+          output: trivy-report.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-report-${{ github.run_id }}
+          path: trivy-report.json
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [prepare, build-and-push]
+    if: always() && needs.build-and-push.result == 'success'
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+      - run: |
+          TAG="${{ needs.prepare.outputs.tag_name }}"
+          cat > release-body.md <<EOF
+          ## Docker
+          \`\`\`
+          docker pull ghcr.io/${{ inputs.image-name }}:$TAG
+          \`\`\`
+          **Tags:** \`$TAG\`, \`latest\`, \`v{major}\`
+          EOF
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: Release ${{ needs.prepare.outputs.tag_name }}
+          generate_release_notes: true
+          body_path: release-body.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

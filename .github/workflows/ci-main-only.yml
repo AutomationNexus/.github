@@ -1,0 +1,126 @@
+name: CI (main-only)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        required: false
+        default: '["ubuntu-latest"]'
+      has-lint:
+        required: false
+        default: false
+        type: boolean
+      has-test:
+        required: false
+        default: false
+        type: boolean
+      has-security:
+        required: false
+        default: false
+        type: boolean
+      python-version:
+        required: false
+        default: "3.11"
+      lint-paths:
+        required: false
+        default: ""
+      pip-install-cmd:
+        required: false
+        default: ""
+      test-cmd:
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  guard-main-push:
+    name: Guard Main Direct Push
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]"]);
+            if (allowedBots.has(context.actor)) {
+              core.info("Allowed bot push to main.");
+              return;
+            }
+            const message = (context.payload.head_commit?.message || "").trim();
+            if (
+              /^Merge pull request #\d+/m.test(message) ||
+              /\(#\d+\)\s*$/.test(message)
+            ) {
+              core.info("Allowed PR merge push to main.");
+              return;
+            }
+            const { owner, repo } = context.repo;
+            const commitShas = (context.payload.commits || []).map((c) => c.id);
+            if (commitShas.length === 0) commitShas.push(context.sha);
+            for (const sha of commitShas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              if (prs.some((pr) => pr.merged_at)) {
+                core.info(`Allowed PR merge push to main (${prs.map((p) => "#" + p.number).join(", ")}).`);
+                return;
+              }
+            }
+            core.setFailed("Direct pushes to main are not allowed. Use a feature branch, open a PR, wait for CI, then merge.");
+
+  guard-main-source:
+    name: Guard Main Source Branch
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR to main — guard does not apply. OK."
+            exit 0
+          fi
+          if [ "${{ github.head_ref }}" = "main" ]; then
+            echo "ERROR: PRs to main must come from a feature branch. Got: ${{ github.head_ref }}"
+            exit 1
+          fi
+          echo "OK — source branch is a feature branch."
+
+  lint:
+    if: inputs.has-lint
+    name: lint
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install ruff
+      - run: ruff check ${{ inputs.lint-paths }}
+
+  test:
+    if: inputs.has-test
+    name: test
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - run: ${{ inputs.test-cmd }}
+
+  security:
+    if: inputs.has-security
+    name: security
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install bandit pip-audit
+      - run: bandit -r . -ll -f json -o bandit-report.json || true
+      - run: pip-audit --format json --output pip-audit.json || true

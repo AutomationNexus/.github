@@ -1,0 +1,415 @@
+name: CI (main+dev)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        description: JSON array of runner labels
+        required: false
+        default: '["ubuntu-latest"]'
+      python-version:
+        required: false
+        default: "3.11"
+        type: string
+      node-version:
+        required: false
+        default: "24"
+        type: string
+      has-frontend:
+        required: false
+        default: false
+        type: boolean
+      has-e2e:
+        required: false
+        default: false
+        type: boolean
+      has-integration:
+        required: false
+        default: false
+        type: boolean
+      has-security:
+        required: false
+        default: true
+        type: boolean
+      has-ha-validate:
+        required: false
+        default: false
+        type: boolean
+      has-addon-validate:
+        required: false
+        default: false
+        type: boolean
+      has-yaml-lint:
+        required: false
+        default: false
+        type: boolean
+      has-shellcheck:
+        required: false
+        default: false
+        type: boolean
+      coverage-threshold:
+        required: false
+        default: 90
+        type: number
+      spa-artifact-path:
+        description: Path for SPA build output
+        required: false
+        default: ""
+        type: string
+      pip-install-cmd:
+        required: false
+        default: 'pip install -e ".[dev,service]" -q'
+        type: string
+      python-cmd:
+        required: false
+        default: "python"
+        type: string
+      lint-paths:
+        required: false
+        default: "src tests tools"
+        type: string
+      test-cmd:
+        description: Full pytest command
+        required: false
+        default: 'python -m pytest -m "not playwright" --cov --cov-report=term-missing:skip-covered --cov-fail-under=90'
+        type: string
+      integration-test-cmd:
+        required: false
+        default: 'python -m pytest -m integration -v --tb=short'
+        type: string
+      e2e-cmd:
+        required: false
+        default: 'python -m pytest tests/e2e_frontend -m playwright -v --tb=short'
+        type: string
+      e2e-working-dir:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  guard-dev-direct-push:
+    name: Guard Dev Direct Push
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]"]);
+            if (allowedBots.has(context.actor)) {
+              core.info("Allowed bot push to dev.");
+              return;
+            }
+            const message = (context.payload.head_commit?.message || "").trim();
+            if (
+              /^Merge pull request #\d+/m.test(message) ||
+              /\(#\d+\)\s*$/.test(message)
+            ) {
+              core.info("Allowed PR merge push to dev.");
+              return;
+            }
+            const { owner, repo } = context.repo;
+            const commitShas = (context.payload.commits || []).map((c) => c.id);
+            if (commitShas.length === 0) commitShas.push(context.sha);
+            for (const sha of commitShas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              if (prs.some((pr) => pr.merged_at)) {
+                core.info(`Allowed PR merge push to dev (${prs.map((p) => "#" + p.number).join(", ")}).`);
+                return;
+              }
+            }
+            core.setFailed("Direct pushes to dev are not allowed. Use a feature branch, open a PR, wait for CI, then merge.");
+
+  guard-main-push:
+    name: Guard Main Direct Push
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.actor }}" != "github-actions[bot]" ]; then
+            echo "::error::Direct human pushes to main are not allowed. Promote dev to main with the workflow."
+            exit 1
+          fi
+          echo "OK; this is not a direct human push to main."
+
+  guard-dev-source:
+    name: Guard Dev Source Branch
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "dev" ]; then
+            echo "Not a PR to dev; guard does not apply. OK."
+            exit 0
+          fi
+          if [ "${{ github.head_ref }}" = "dev" ] || [ "${{ github.head_ref }}" = "main" ]; then
+            echo "::error::PRs to dev must come from a feature branch, not '${{ github.head_ref }}'."
+            exit 1
+          fi
+          echo "OK; source branch is a feature branch."
+
+  guard-main-source:
+    name: Guard Main Source Branch
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR to main — guard does not apply. OK."
+            exit 0
+          fi
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "ERROR: PRs to main must come from the 'dev' branch. Got: ${{ github.head_ref }}"
+            exit 1
+          fi
+          echo "OK — source branch is dev."
+
+  guard-main-files:
+    name: Guard Main Files
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref != 'dev' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check for disallowed files targeting main
+        run: |
+          if [ ! -f .github/dev-only-paths ]; then
+            echo "No .github/dev-only-paths file — OK."
+            exit 0
+          fi
+          if git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths | grep -q .; then
+            echo "ERROR: PR to main contains paths blocked by .github/dev-only-paths"
+            git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths
+            exit 1
+          fi
+          echo "OK — no disallowed files found."
+
+  hygiene:
+    name: hygiene
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: secrets must never be tracked
+        run: |
+          bad=$(git ls-files | grep -E '^\.env$|\.pem$|(^|/)id_rsa' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::credential files must never be committed:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "ok — no credential files tracked"
+      - name: main must be clean of machine-local tooling files
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+        run: |
+          if [ ! -f .github/dev-only-paths ]; then
+            echo "No .github/dev-only-paths — skipping main tree check."
+            exit 0
+          fi
+          bad=$(git ls-files | grep -iE -f .github/dev-only-paths || true)
+          if [ -n "$bad" ]; then
+            echo "::error::machine-local tooling files (see .github/dev-only-paths) must not be on main:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "ok — no machine-local tooling files on main"
+
+  lint:
+    name: lint
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install ruff ${{ inputs.has-yaml-lint && 'yamllint' || '' }} ${{ inputs.has-shellcheck && 'shellcheck-py' || '' }}
+      - run: ruff check ${{ inputs.lint-paths }}
+      - if: inputs.has-yaml-lint
+        run: yamllint .
+      - if: inputs.has-shellcheck
+        run: |
+          sh_files=$(git ls-files '*.sh' | head -20)
+          if [ -n "$sh_files" ]; then shellcheck $sh_files; fi
+      - run: |
+          if [ -f tools/check-operator-env-gates.sh ]; then
+            bash tools/check-operator-env-gates.sh
+          else
+            echo "No operator env gates script — OK."
+          fi
+
+  test-standards:
+    name: test-standards
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: |
+          if [ -f tests/check_test_standards.py ]; then
+            pip install pyyaml -q 2>/dev/null || true
+            python tests/check_test_standards.py
+          else
+            echo "No test-standards script — OK."
+          fi
+
+  frontend:
+    if: inputs.has-frontend
+    name: frontend
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run typecheck
+      - working-directory: frontend
+        run: npm test
+      - name: Build SPA
+        working-directory: frontend
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+          retention-days: 1
+
+  test:
+    name: test
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - run: ${{ inputs.test-cmd }}
+
+  integration:
+    if: inputs.has-integration
+    name: integration
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - name: Start service
+        run: bash tools/ci-start-mosquitto.sh
+        continue-on-error: true
+      - run: ${{ inputs.integration-test-cmd }}
+      - if: always()
+        run: docker rm -f "${CI_MOSQUITTO_CONTAINER:-}" 2>/dev/null || true
+
+  e2e:
+    if: inputs.has-e2e
+    name: e2e
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    needs: [frontend]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run E2E tests
+        working-directory: ${{ inputs.e2e-working-dir || '.' }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::E2E attempt ${attempt}/3"
+            if ${{ inputs.e2e-cmd }}; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::E2E attempt ${attempt}/3 failed"
+            sleep 10
+          done
+          echo "::error::E2E tests failed after 3 attempts"
+          exit 1
+
+  security:
+    if: inputs.has-security
+    name: security
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install bandit pip-audit
+      - run: bandit -r . -ll -f json -o bandit-report.json || true
+      - run: pip-audit --format json --output pip-audit.json || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: security-reports-${{ github.run_id }}
+          path: "*.json"
+          retention-days: 1
+
+  ha-validate:
+    if: inputs.has-ha-validate
+    name: ha-validate
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install yamllint
+      - run: yamllint .
+      - name: Home Assistant config check
+        run: |
+          if [ ! -f secrets.yaml ] && [ -f secrets.yaml.example ]; then
+            cp secrets.yaml.example secrets.yaml
+          fi
+          docker run --rm -v "$PWD:/config" ghcr.io/home-assistant/home-assistant:stable \
+            python -m homeassistant --script check_config --config /config
+
+  addon-validate:
+    if: inputs.has-addon-validate
+    name: addon-validate
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install pyyaml -q
+      - run: |
+          if [ -f tools/validate_ha_addon.py ]; then python tools/validate_ha_addon.py; fi
+          if [ -f tools/check_build_from.py ]; then python tools/check_build_from.py; fi

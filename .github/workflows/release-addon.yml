@@ -1,0 +1,46 @@
+name: Release (Add-on)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        required: false
+        default: '["ubuntu-latest"]'
+      config-path:
+        required: false
+        default: "modeldeck/config.yaml"
+      python-version:
+        required: false
+        default: "3.11"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Tag Add-on Release
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Resolve version and publish release
+        run: |
+          pip install pyyaml -q
+          VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('${{ inputs.config-path }}'))['version'])")
+          TAG="v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.tag_name }}
+          name: Release ${{ env.tag_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
