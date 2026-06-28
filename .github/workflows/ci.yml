@@ -219,12 +219,16 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     if: inputs.branch-model == 'main-dev'
     steps:
-      - run: |
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "dev" ]; then
+      - env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" != "dev" ]; then
             echo "Not a PR to dev — guard does not apply. OK."; exit 0
           fi
-          if [ "${{ github.head_ref }}" = "dev" ] || [ "${{ github.head_ref }}" = "main" ]; then
-            echo "::error::PRs to dev must come from a feature branch, not '${{ github.head_ref }}'."; exit 1
+          if [ "$HEAD_REF" = "dev" ] || [ "$HEAD_REF" = "main" ]; then
+            echo "::error::PRs to dev must come from a feature branch, not '$HEAD_REF'."; exit 1
           fi
           echo "OK — source branch is a feature branch."
 
@@ -234,19 +238,24 @@ jobs:
     name: Guard Main Source Branch
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
-      - run: |
-          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+      - env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          BRANCH_MODEL: ${{ inputs.branch-model }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" != "main" ]; then
             echo "Not a PR to main — guard does not apply. OK."; exit 0
           fi
-          if [ "${{ inputs.branch-model }}" = "main-only" ]; then
-            if [ "${{ github.head_ref }}" = "main" ]; then
+          if [ "$BRANCH_MODEL" = "main-only" ]; then
+            if [ "$HEAD_REF" = "main" ]; then
               echo "::error::PRs to main must come from a feature branch."; exit 1
             fi
             echo "OK — source is a feature branch (main-only model)."; exit 0
           fi
           # main-dev: must come from dev
-          if [ "${{ github.head_ref }}" != "dev" ]; then
-            echo "::error::PRs to main must come from 'dev'. Got: ${{ github.head_ref }}"; exit 1
+          if [ "$HEAD_REF" != "dev" ]; then
+            echo "::error::PRs to main must come from 'dev'. Got: $HEAD_REF"; exit 1
           fi
           echo "OK — source branch is dev."
 
@@ -283,8 +292,6 @@ jobs:
       inputs.auto-revert == true &&
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
-    permissions:
-      contents: write
     steps:
       - name: Check if push is authorised
         id: check
