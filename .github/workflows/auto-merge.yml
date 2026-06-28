@@ -51,6 +51,7 @@ jobs:
 
           for attempt in $(seq 1 120); do
             runs_json=$(gh api "repos/${REPO}/actions/runs" \
+              --method GET \
               --field event=pull_request \
               --field head_sha="${HEAD_SHA}" \
               --field per_page=100 \
