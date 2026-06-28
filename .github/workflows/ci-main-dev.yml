@@ -85,6 +85,10 @@ on:
         required: false
         default: ""
         type: string
+      e2e-pip-install-cmd:
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -341,6 +345,8 @@ jobs:
           name: spa-dist-${{ github.run_id }}
           path: ${{ inputs.spa-artifact-path }}
       - run: ${{ inputs.pip-install-cmd }}
+      - name: Install dependencies (e2e)
+        run: ${{ inputs.e2e-pip-install-cmd || inputs.pip-install-cmd }}
       - name: Install Playwright Chromium
         run: python -m playwright install --with-deps chromium
       - name: Run E2E tests
