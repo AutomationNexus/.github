@@ -180,7 +180,7 @@ jobs:
             const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]", "automationnexus-ci-bot[bot]"]);
             if (allowedBots.has(context.actor)) { core.info("Allowed bot push."); return; }
             const msg = (context.payload.head_commit?.message || "").trim();
-            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)/m.test(msg)) {
               core.info("Allowed PR-merge push to dev."); return;
             }
             const { owner, repo } = context.repo;
@@ -206,7 +206,7 @@ jobs:
             const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]", "automationnexus-ci-bot[bot]"]);
             if (allowedBots.has(context.actor)) { core.info("Allowed bot push."); return; }
             const msg = (context.payload.head_commit?.message || "").trim();
-            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)/m.test(msg)) {
               core.info("Allowed PR-merge push to main."); return;
             }
             const { owner, repo } = context.repo;
@@ -309,7 +309,7 @@ jobs:
               core.setOutput("revert", "false"); return;
             }
             const msg = (context.payload.head_commit?.message || "").trim();
-            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)/m.test(msg)) {
               core.info("PR merge push — authorised."); core.setOutput("revert", "false"); return;
             }
             const { owner, repo } = context.repo;
