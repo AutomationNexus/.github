@@ -2,8 +2,6 @@ name: Semgrep
 
 on:
   workflow_call:
-    secrets: {}
-
 permissions:
   contents: read
 

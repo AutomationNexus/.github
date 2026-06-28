@@ -2,8 +2,6 @@ name: Auto-merge
 
 on:
   workflow_call:
-    secrets: {}
-
 permissions:
   contents: write
   pull-requests: write
