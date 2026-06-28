@@ -234,7 +234,8 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
       - run: pip install ruff ${{ inputs.has-yaml-lint && 'yamllint' || '' }} ${{ inputs.has-shellcheck && 'shellcheck-py' || '' }}
-      - run: ruff check ${{ inputs.lint-paths }}
+      - if: inputs.lint-paths != ''
+        run: ruff check ${{ inputs.lint-paths }}
       - if: inputs.has-yaml-lint
         run: yamllint .
       - if: inputs.has-shellcheck
@@ -294,6 +295,7 @@ jobs:
 
   test:
     name: test
+    if: inputs.pip-install-cmd != '' && inputs.test-cmd != ''
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 20
     steps:
@@ -311,7 +313,7 @@ jobs:
       - run: ${{ inputs.test-cmd }}
 
   integration:
-    if: inputs.has-integration
+    if: inputs.has-integration && inputs.pip-install-cmd != ''
     name: integration
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 15
