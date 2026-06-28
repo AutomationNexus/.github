@@ -1,6 +1,6 @@
 name: Auto-merge
 
-# Enables auto-merge on qualifying PRs using the CI-Bot GitHub App.
+# Merges qualifying PRs using the CI-Bot GitHub App after PR checks are green.
 # Because the App performs the merge (not GITHUB_TOKEN), the resulting push
 # WILL trigger downstream workflows (nightly on dev push, release on main push).
 #
@@ -22,8 +22,9 @@ permissions:
 
 jobs:
   enable:
-    name: Enable auto-merge (CI-Bot)
+    name: Auto-merge after checks (CI-Bot)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: >-
       !github.event.pull_request.draft && (
         (github.event.pull_request.base.ref == 'dev' &&
@@ -40,7 +41,46 @@ jobs:
           app-id: ${{ secrets.ci-bot-app-id }}
           private-key: ${{ secrets.ci-bot-app-private-key }}
 
-      - name: Enable auto-merge
+      - name: Wait for PR checks
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 120); do
+            runs_json=$(gh api "repos/${REPO}/actions/runs" \
+              --field event=pull_request \
+              --field head_sha="${HEAD_SHA}" \
+              --field per_page=100 \
+              --jq '[.workflow_runs[] | select(.path != ".github/workflows/auto-merge.yml")]')
+
+            ci_count=$(jq '[.[] | select(.path == ".github/workflows/ci.yml")] | length' <<<"${runs_json}")
+            total=$(jq 'length' <<<"${runs_json}")
+            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"${runs_json}")
+            failing=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length' <<<"${runs_json}")
+
+            echo "attempt=${attempt} ci_count=${ci_count} total=${total} pending=${pending} failing=${failing}"
+            jq -r '.[] | "- \(.name) [\(.path)] status=\(.status) conclusion=\(.conclusion // "")"' <<<"${runs_json}"
+
+            if [ "${ci_count}" -gt 0 ] && [ "${pending}" -eq 0 ] && [ "${failing}" -eq 0 ]; then
+              echo "All PR checks are green for ${HEAD_SHA}."
+              exit 0
+            fi
+
+            if [ "${failing}" -gt 0 ]; then
+              echo "::error::One or more PR checks failed for ${HEAD_SHA}."
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+          echo "::error::Timed out waiting for PR checks for ${HEAD_SHA}."
+          exit 1
+
+      - name: Merge PR
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -49,9 +89,9 @@ jobs:
         run: |
           if [ "$BASE" = "main" ]; then
             # dev → main: keep merge commit so history is linear for releases
-            gh pr merge "$PR" --repo "$REPO" --auto --merge
+            gh pr merge "$PR" --repo "$REPO" --merge
           else
             # feature → dev: squash for a clean dev history
-            gh pr merge "$PR" --repo "$REPO" --auto --squash
+            gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
           fi
-          echo "Auto-merge enabled on PR #${PR} (${BASE} target)."
+          echo "Merged PR #${PR} (${BASE} target)."
