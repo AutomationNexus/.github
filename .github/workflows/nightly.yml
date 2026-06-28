@@ -13,6 +13,11 @@ on:
       platforms:
         required: false
         default: "linux/amd64"
+        type: string
+      force_run:
+        required: false
+        default: false
+        type: boolean
       has-frontend:
         required: false
         default: false
@@ -20,12 +25,15 @@ on:
       spa-artifact-path:
         required: false
         default: ""
+        type: string
       node-version:
         required: false
         default: "24"
+        type: string
       python-version:
         required: false
         default: "3.11"
+        type: string
       coverage-threshold:
         required: false
         default: 90
@@ -79,10 +87,9 @@ jobs:
       - run: pip install ruff && ruff check src tests tools
 
   frontend:
-    if: inputs.has-frontend
     name: Frontend (nightly)
     needs: detect-changes
-    if: needs.detect-changes.outputs.has_changes == 'true'
+    if: inputs.has-frontend && needs.detect-changes.outputs.has_changes == 'true'
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
       - uses: actions/checkout@v6
@@ -104,7 +111,10 @@ jobs:
   test:
     name: Python Tests (nightly)
     needs: [detect-changes, frontend]
-    if: needs.detect-changes.outputs.has_changes == 'true'
+    if: >-
+      always() &&
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      (inputs.has-frontend == false || needs.frontend.result == 'success')
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
       - uses: actions/checkout@v6

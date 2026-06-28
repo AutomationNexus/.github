@@ -90,6 +90,16 @@ on:
         required: false
         default: ""
         type: string
+      pre-test-cmd:
+        description: "Command to run before pip-install-cmd in the test job"
+        required: false
+        default: ""
+        type: string
+      post-test-cmd:
+        description: "Command to run after test-cmd in the test job"
+        required: false
+        default: ""
+        type: string
       integration-test-cmd:
         required: false
         default: 'python -m pytest -m integration -v --tb=short'
@@ -106,6 +116,26 @@ on:
         description: "Extra pip install before e2e (defaults to pip-install-cmd)"
         required: false
         default: ""
+        type: string
+      pre-e2e-cmd:
+        description: "Command to run in e2e-working-dir before browser install"
+        required: false
+        default: ""
+        type: string
+      e2e-has-node:
+        description: "Set up Node.js in the e2e job"
+        required: false
+        default: false
+        type: boolean
+      e2e-node-cache-dependency-path:
+        description: "npm lockfile path for e2e Node cache"
+        required: false
+        default: "frontend/package-lock.json"
+        type: string
+      e2e-playwright-install-cmd:
+        description: "Browser install command for the e2e job"
+        required: false
+        default: 'python -m playwright install --with-deps chromium'
         type: string
     secrets:
       ci-bot-app-id:
@@ -427,8 +457,12 @@ jobs:
         with:
           name: spa-dist-${{ github.run_id }}
           path: ${{ inputs.spa-artifact-path }}
+      - if: inputs.pre-test-cmd != ''
+        run: ${{ inputs.pre-test-cmd }}
       - run: ${{ inputs.pip-install-cmd }}
       - run: ${{ inputs.test-cmd }}
+      - if: always() && inputs.post-test-cmd != ''
+        run: ${{ inputs.post-test-cmd }}
 
   integration:
     if: inputs.has-integration && inputs.pip-install-cmd != '' && github.event_name == 'pull_request'
@@ -459,6 +493,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
+      - if: inputs.e2e-has-node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.e2e-node-cache-dependency-path }}
       - if: inputs.has-frontend
         uses: actions/download-artifact@v8
         with:
@@ -466,8 +506,13 @@ jobs:
           path: ${{ inputs.spa-artifact-path }}
       - name: Install Python deps
         run: ${{ inputs.e2e-pip-install-cmd || inputs.pip-install-cmd }}
+      - name: Prepare E2E dependencies
+        if: inputs.pre-e2e-cmd != ''
+        working-directory: ${{ inputs.e2e-working-dir || '.' }}
+        run: ${{ inputs.pre-e2e-cmd }}
       - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+        working-directory: ${{ inputs.e2e-working-dir || '.' }}
+        run: ${{ inputs.e2e-playwright-install-cmd }}
       - name: Run E2E tests
         working-directory: ${{ inputs.e2e-working-dir || '.' }}
         run: |

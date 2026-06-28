@@ -10,9 +10,11 @@ on:
       config-path:
         required: false
         default: "modeldeck/config.yaml"
+        type: string
       python-version:
         required: false
         default: "3.11"
+        type: string
 
 permissions:
   contents: write

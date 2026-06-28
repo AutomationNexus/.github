@@ -14,12 +14,23 @@ on:
       spa-artifact-path:
         required: false
         default: ""
+        type: string
       node-version:
         required: false
         default: "24"
+        type: string
       python-version:
         required: false
         default: "3.11"
+        type: string
+      tag_name:
+        required: false
+        default: ""
+        type: string
+    outputs:
+      tag_name:
+        description: "Resolved release tag"
+        value: ${{ jobs.prepare.outputs.tag_name }}
 
 permissions:
   contents: write
@@ -45,7 +56,12 @@ jobs:
         run: |
           set -e
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag_name }}"; KIND="dispatch"
+            TAG="${{ inputs.tag_name }}"
+            if [ -z "$TAG" ]; then
+              echo "tag_name is required for manual dispatch rebuilds"
+              exit 1
+            fi
+            KIND="dispatch"
           elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"; KIND="tag_push"
           elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
@@ -97,6 +113,10 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: [prepare, frontend]
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      (inputs.has-frontend == false || needs.frontend.result == 'success')
     # OIDC trusted publishing requires GitHub-hosted runner
     runs-on: ubuntu-24.04
     environment: pypi
