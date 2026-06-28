@@ -2,6 +2,7 @@ name: CI (main+dev)
 
 on:
   workflow_call:
+    secrets: {}
     inputs:
       runner-labels:
         description: JSON array of runner labels

@@ -2,6 +2,7 @@ name: Deploy Docs
 
 on:
   workflow_call:
+    secrets: {}
 
 permissions:
   contents: read

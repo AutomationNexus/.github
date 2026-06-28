@@ -2,6 +2,7 @@ name: Release (Add-on)
 
 on:
   workflow_call:
+    secrets: {}
     inputs:
       runner-labels:
         required: false

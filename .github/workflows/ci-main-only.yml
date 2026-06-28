@@ -2,6 +2,7 @@ name: CI (main-only)
 
 on:
   workflow_call:
+    secrets: {}
     inputs:
       runner-labels:
         required: false
