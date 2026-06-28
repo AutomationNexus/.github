@@ -6,9 +6,12 @@ on:
       runner-labels:
         required: false
         default: '["ubuntu-latest"]'
+        type: string
     secrets:
-      repo-dispatch-pat:
-        required: false
+      ci-bot-app-id:
+        required: true
+      ci-bot-app-private-key:
+        required: true
 
 permissions:
   actions: write
@@ -17,7 +20,7 @@ permissions:
 
 jobs:
   promote:
-    name: Promote dev → main
+    name: Promote dev to main
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 30
     steps:
@@ -28,47 +31,56 @@ jobs:
             const { owner, repo } = context.repo;
             const { data: workflows } = await github.rest.actions.listRepoWorkflows({ owner, repo });
             const ci = workflows.workflows.find((w) => w.path === ".github/workflows/ci.yml");
-            if (!ci) core.setFailed("CI workflow not found");
+            if (!ci) { core.setFailed("CI workflow not found"); return; }
             const { data } = await github.rest.actions.listWorkflowRuns({
               owner, repo, workflow_id: ci.id, branch: "dev", per_page: 1,
             });
             const run = data.workflow_runs[0];
             if (!run || run.conclusion !== "success") {
               core.setFailed(`Latest dev CI must be success (got ${run?.conclusion ?? "none"})`);
+              return;
             }
             core.info(`Dev CI run ${run.id} succeeded at ${run.updated_at}`);
+
+      - name: Mint CI-Bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
 
       - uses: actions/checkout@v6
         with:
           ref: dev
           fetch-depth: 0
+          token: ${{ steps.bot-token.outputs.token }}
 
-      - name: Promote dev to main by PR
+      - name: Promote dev to main via PR (CI-Bot)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ahead=$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')
-          behind=$(gh api "repos/${REPO}/compare/main...dev" --jq '.behind_by')
-          echo "dev is ${ahead} commit(s) ahead of main and ${behind} behind."
+          echo "dev is ${ahead} commit(s) ahead of main."
           if [ "${ahead}" = "0" ]; then
-            echo "No dev commits to promote."
-            exit 0
+            echo "Nothing to promote."; exit 0
           fi
 
-          pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')
+          pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open \
+               --json number --jq '.[0].number // empty')
           if [ -z "${pr}" ]; then
             gh pr create --repo "${REPO}" --base main --head dev \
               --title "release: promote dev to main" \
-              --body "Automated promotion after dev CI passed."
-            pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')
+              --body "Automated promotion after dev CI passed. Merges when CI on this PR is green."
+            pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open \
+                 --json number --jq '.[0].number // empty')
           fi
 
           if [ -z "${pr}" ]; then
-            echo "::error::Promotion PR was not created or found."
-            exit 1
+            echo "::error::Promotion PR not found after creation."; exit 1
           fi
 
-          echo "Enabling auto-merge on promotion PR #${pr}..."
+          echo "Enabling auto-merge on promotion PR #${pr} (CI-Bot)..."
           gh pr merge "${pr}" --repo "${REPO}" --auto --merge
+          echo "Auto-merge enabled. Merge will happen once CI on PR #${pr} is green."

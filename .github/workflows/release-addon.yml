@@ -6,6 +6,7 @@ on:
       runner-labels:
         required: false
         default: '["ubuntu-latest"]'
+        type: string
       config-path:
         required: false
         default: "modeldeck/config.yaml"

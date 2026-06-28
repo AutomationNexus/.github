@@ -1,0 +1,537 @@
+name: CI
+
+# Unified CI for all AutomationNexus repos.
+# branch-model: "main-dev" (default) — feature→dev→main flow
+#               "main-only"           — feature→main directly (e.g. ARCRunner)
+# auto-revert:  true — on unauthorised direct push to a protected branch, the CI Bot
+#               force-resets the branch back to the pre-push SHA. Loop-safe (Bot actor
+#               is always allowed). Set true on private repos without rulesets.
+
+on:
+  workflow_call:
+    inputs:
+      # ── Branch model ─────────────────────────────────────────────────────────
+      branch-model:
+        description: '"main-dev" or "main-only"'
+        required: false
+        default: "main-dev"
+        type: string
+      # ── Auto-revert (private repos without rulesets) ─────────────────────────
+      auto-revert:
+        description: "Force-reset branch on unauthorised direct push"
+        required: false
+        default: false
+        type: boolean
+      # ── Runner / runtime ─────────────────────────────────────────────────────
+      runner-labels:
+        description: "JSON array of runner labels"
+        required: false
+        default: '["ubuntu-latest"]'
+        type: string
+      python-version:
+        required: false
+        default: "3.11"
+        type: string
+      node-version:
+        required: false
+        default: "24"
+        type: string
+      # ── Optional job toggles ─────────────────────────────────────────────────
+      has-frontend:
+        required: false
+        default: false
+        type: boolean
+      has-e2e:
+        required: false
+        default: false
+        type: boolean
+      has-integration:
+        required: false
+        default: false
+        type: boolean
+      has-security:
+        required: false
+        default: true
+        type: boolean
+      has-ha-validate:
+        required: false
+        default: false
+        type: boolean
+      has-addon-validate:
+        required: false
+        default: false
+        type: boolean
+      has-yaml-lint:
+        required: false
+        default: false
+        type: boolean
+      has-shellcheck:
+        required: false
+        default: false
+        type: boolean
+      # ── Commands / paths ────────────────────────────────────────────────────
+      spa-artifact-path:
+        description: "Path where the frontend build is written (used for artifact upload/download)"
+        required: false
+        default: ""
+        type: string
+      pip-install-cmd:
+        description: "Command to install Python deps (empty → test job skipped)"
+        required: false
+        default: ""
+        type: string
+      lint-paths:
+        description: "Paths passed to ruff check (empty → ruff skipped)"
+        required: false
+        default: ""
+        type: string
+      test-cmd:
+        description: "Full pytest command (empty → test job skipped)"
+        required: false
+        default: ""
+        type: string
+      integration-test-cmd:
+        required: false
+        default: 'python -m pytest -m integration -v --tb=short'
+        type: string
+      e2e-cmd:
+        required: false
+        default: 'python -m pytest tests/e2e_frontend -m playwright -v --tb=short'
+        type: string
+      e2e-working-dir:
+        required: false
+        default: ""
+        type: string
+      e2e-pip-install-cmd:
+        description: "Extra pip install before e2e (defaults to pip-install-cmd)"
+        required: false
+        default: ""
+        type: string
+    secrets:
+      ci-bot-app-id:
+        required: false
+      ci-bot-app-private-key:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # GUARDS — run on both push and pull_request events.
+  # Jobs with event-specific `if:` are no-ops on irrelevant events (never SKIPPED,
+  # always SUCCESS) so branch-protection required-checks never block on them.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  guard-dev-direct-push:
+    # Only meaningful in main-dev model; skips silently for main-only.
+    name: Guard Dev Direct Push
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: inputs.branch-model == 'main-dev'
+    steps:
+      - name: Allow or reject
+        uses: actions/github-script@v8
+        with:
+          script: |
+            if (context.eventName !== "push" || context.ref !== "refs/heads/dev") {
+              core.info("Not a push to dev — guard does not apply. OK.");
+              return;
+            }
+            const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]", "automationnexus-ci-bot[bot]"]);
+            if (allowedBots.has(context.actor)) { core.info("Allowed bot push."); return; }
+            const msg = (context.payload.head_commit?.message || "").trim();
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+              core.info("Allowed PR-merge push to dev."); return;
+            }
+            const { owner, repo } = context.repo;
+            const shas = [...new Set([...(context.payload.commits || []).map(c => c.id), context.sha])];
+            for (const sha of shas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              if (prs.some(pr => pr.merged_at)) { core.info("Allowed PR-merge push to dev."); return; }
+            }
+            core.setFailed("Direct pushes to dev are not allowed. Open a PR from a feature branch.");
+
+  guard-main-direct-push:
+    name: Guard Main Direct Push
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - name: Allow or reject
+        uses: actions/github-script@v8
+        with:
+          script: |
+            if (context.eventName !== "push" || context.ref !== "refs/heads/main") {
+              core.info("Not a push to main — guard does not apply. OK.");
+              return;
+            }
+            const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]", "automationnexus-ci-bot[bot]"]);
+            if (allowedBots.has(context.actor)) { core.info("Allowed bot push."); return; }
+            const msg = (context.payload.head_commit?.message || "").trim();
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+              core.info("Allowed PR-merge push to main."); return;
+            }
+            const { owner, repo } = context.repo;
+            const shas = [...new Set([...(context.payload.commits || []).map(c => c.id), context.sha])];
+            for (const sha of shas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              if (prs.some(pr => pr.merged_at && pr.base?.ref === "main")) {
+                core.info("Allowed PR-merge push to main."); return;
+              }
+            }
+            core.setFailed("Direct pushes to main are not allowed. Promote dev → main with the workflow.");
+
+  guard-dev-source:
+    name: Guard Dev Source Branch
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: inputs.branch-model == 'main-dev'
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "dev" ]; then
+            echo "Not a PR to dev — guard does not apply. OK."; exit 0
+          fi
+          if [ "${{ github.head_ref }}" = "dev" ] || [ "${{ github.head_ref }}" = "main" ]; then
+            echo "::error::PRs to dev must come from a feature branch, not '${{ github.head_ref }}'."; exit 1
+          fi
+          echo "OK — source branch is a feature branch."
+
+  guard-main-source:
+    # main-dev: PRs to main must come from dev.
+    # main-only: PRs to main must come from a feature branch (not main itself).
+    name: Guard Main Source Branch
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR to main — guard does not apply. OK."; exit 0
+          fi
+          if [ "${{ inputs.branch-model }}" = "main-only" ]; then
+            if [ "${{ github.head_ref }}" = "main" ]; then
+              echo "::error::PRs to main must come from a feature branch."; exit 1
+            fi
+            echo "OK — source is a feature branch (main-only model)."; exit 0
+          fi
+          # main-dev: must come from dev
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs to main must come from 'dev'. Got: ${{ github.head_ref }}"; exit 1
+          fi
+          echo "OK — source branch is dev."
+
+  guard-main-files:
+    name: Guard Main Files
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.base_ref == 'main' &&
+      inputs.branch-model == 'main-dev' &&
+      github.head_ref != 'dev'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - run: |
+          if [ ! -f .github/dev-only-paths ]; then echo "No dev-only-paths — OK."; exit 0; fi
+          if git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths | grep -q .; then
+            git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths
+            echo "::error::PR to main contains paths blocked by .github/dev-only-paths"; exit 1
+          fi
+          echo "OK — no disallowed files."
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # AUTO-REVERT (private repos only — gates on auto-revert input)
+  # Fires on push to dev or main. If the push was unauthorised, the CI Bot
+  # force-resets the branch back to github.event.before.
+  # ═══════════════════════════════════════════════════════════════════════════
+  auto-revert:
+    name: Auto-revert Unauthorised Push
+    runs-on: ubuntu-latest
+    # Only run on direct pushes to protected branches when auto-revert is enabled
+    if: >-
+      inputs.auto-revert == true &&
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+    permissions:
+      contents: write
+    steps:
+      - name: Check if push is authorised
+        id: check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const allowedBots = new Set(["github-actions[bot]", "dependabot[bot]", "automationnexus-ci-bot[bot]"]);
+            if (allowedBots.has(context.actor)) {
+              core.info("Bot push — authorised. No revert needed.");
+              core.setOutput("revert", "false"); return;
+            }
+            const msg = (context.payload.head_commit?.message || "").trim();
+            if (/^Merge pull request #\d+/m.test(msg) || /\(#\d+\)\s*$/.test(msg)) {
+              core.info("PR merge push — authorised."); core.setOutput("revert", "false"); return;
+            }
+            const { owner, repo } = context.repo;
+            const shas = [...new Set([...(context.payload.commits || []).map(c => c.id), context.sha])];
+            for (const sha of shas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              if (prs.some(pr => pr.merged_at)) {
+                core.info("PR merge push — authorised."); core.setOutput("revert", "false"); return;
+              }
+            }
+            const before = context.payload.before;
+            if (!before || before === "0000000000000000000000000000000000000000") {
+              core.warning("Branch creation push — skipping revert.");
+              core.setOutput("revert", "false"); return;
+            }
+            core.warning(`Unauthorised direct push by ${context.actor} — will revert to ${before}`);
+            core.setOutput("revert", "true");
+            core.setOutput("before", before);
+
+      - name: Mint CI-Bot token
+        if: steps.check.outputs.revert == 'true'
+        id: token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+
+      - name: Force-reset branch to pre-push SHA
+        if: steps.check.outputs.revert == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          BEFORE: ${{ steps.check.outputs.before }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "::warning::Reverting unauthorised direct push by ${ACTOR} on ${BRANCH} → ${BEFORE}"
+          gh api "repos/${{ github.repository }}/git/refs/heads/${BRANCH}" \
+            --method PATCH \
+            --field sha="${BEFORE}" \
+            --field force=true
+          echo "Branch ${BRANCH} reset to ${BEFORE}."
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECKS — only on pull_request events (avoids duplicate runs on push-to-dev)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  hygiene:
+    name: hygiene
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+      - name: No credential files tracked
+        run: |
+          bad=$(git ls-files | grep -E '^\.env$|\.pem$|(^|/)id_rsa' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Credential files must never be committed: $bad"; exit 1
+          fi
+          echo "ok — no credential files"
+      - name: Main must be clean of dev-only tooling
+        if: github.base_ref == 'main'
+        run: |
+          if [ ! -f .github/dev-only-paths ]; then exit 0; fi
+          bad=$(git ls-files | grep -iE -f .github/dev-only-paths || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Dev-only tooling files on main: $bad"; exit 1
+          fi
+          echo "ok — no dev-only files on main"
+
+  lint:
+    name: lint
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: |
+          pkgs="ruff"
+          ${{ inputs.has-yaml-lint }} && pkgs="$pkgs yamllint"
+          ${{ inputs.has-shellcheck }} && pkgs="$pkgs shellcheck-py"
+          pip install $pkgs
+      - if: inputs.lint-paths != ''
+        run: ruff check ${{ inputs.lint-paths }}
+      - if: inputs.has-yaml-lint
+        run: yamllint .
+      - if: inputs.has-shellcheck
+        run: |
+          files=$(git ls-files '*.sh')
+          [ -n "$files" ] && shellcheck $files || echo "No .sh files."
+      - name: Operator env gates
+        run: |
+          if [ -f tools/check-operator-env-gates.sh ]; then
+            bash tools/check-operator-env-gates.sh
+          fi
+
+  test-standards:
+    name: test-standards
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: |
+          if [ -f tests/check_test_standards.py ]; then
+            pip install pyyaml -q 2>/dev/null || true
+            python tests/check_test_standards.py
+          else
+            echo "No test-standards script — OK."
+          fi
+
+  frontend:
+    if: inputs.has-frontend && github.event_name == 'pull_request'
+    name: frontend
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run typecheck
+      - working-directory: frontend
+        run: npm test
+      - name: Build SPA
+        working-directory: frontend
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+          retention-days: 1
+
+  test:
+    name: test
+    if: inputs.pip-install-cmd != '' && inputs.test-cmd != '' && github.event_name == 'pull_request'
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - run: ${{ inputs.test-cmd }}
+
+  integration:
+    if: inputs.has-integration && inputs.pip-install-cmd != '' && github.event_name == 'pull_request'
+    name: integration
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: ${{ inputs.pip-install-cmd }}
+      - name: Start service
+        run: bash tools/ci-start-mosquitto.sh
+        continue-on-error: true
+      - run: ${{ inputs.integration-test-cmd }}
+      - if: always()
+        run: docker rm -f "${CI_MOSQUITTO_CONTAINER:-}" 2>/dev/null || true
+
+  e2e:
+    if: inputs.has-e2e && github.event_name == 'pull_request'
+    name: e2e
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    needs: [frontend]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - name: Install Python deps
+        run: ${{ inputs.e2e-pip-install-cmd || inputs.pip-install-cmd }}
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run E2E tests
+        working-directory: ${{ inputs.e2e-working-dir || '.' }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::E2E attempt ${attempt}/3"
+            if ${{ inputs.e2e-cmd }}; then echo "::endgroup::"; exit 0; fi
+            echo "::endgroup::"
+            echo "::warning::E2E attempt ${attempt}/3 failed"
+            sleep 10
+          done
+          echo "::error::E2E tests failed after 3 attempts"
+          exit 1
+
+  security:
+    if: inputs.has-security && github.event_name == 'pull_request'
+    name: security
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install bandit pip-audit
+      - run: bandit -r . -ll -f json -o bandit-report.json
+      - run: pip-audit --format json --output pip-audit.json || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: security-reports-${{ github.run_id }}
+          path: "*.json"
+          retention-days: 1
+
+  ha-validate:
+    if: inputs.has-ha-validate && github.event_name == 'pull_request'
+    name: ha-validate
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install yamllint
+      - run: yamllint .
+      - name: HA config check
+        run: |
+          if [ ! -f secrets.yaml ] && [ -f secrets.yaml.example ]; then
+            cp secrets.yaml.example secrets.yaml
+          fi
+          docker run --rm -v "$PWD:/config" ghcr.io/home-assistant/home-assistant:stable \
+            python -m homeassistant --script check_config --config /config
+
+  addon-validate:
+    if: inputs.has-addon-validate && github.event_name == 'pull_request'
+    name: addon-validate
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install pyyaml -q
+      - run: |
+          if [ -f tools/validate_ha_addon.py ]; then python tools/validate_ha_addon.py; fi
+          if [ -f tools/check_build_from.py ]; then python tools/check_build_from.py; fi

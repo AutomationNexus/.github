@@ -1,15 +1,30 @@
 name: Auto-merge
 
+# Enables auto-merge on qualifying PRs using the CI-Bot GitHub App.
+# Because the App performs the merge (not GITHUB_TOKEN), the resulting push
+# WILL trigger downstream workflows (nightly on dev push, release on main push).
+#
+# Qualifying PRs:
+#   feature → dev : squash merge
+#   dev → main    : merge commit (preserves history for releases)
+
 on:
   workflow_call:
+    secrets:
+      ci-bot-app-id:
+        required: true
+      ci-bot-app-private-key:
+        required: true
+
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   enable:
+    name: Enable auto-merge (CI-Bot)
     runs-on: ubuntu-latest
-    if: >
+    if: >-
       !github.event.pull_request.draft && (
         (github.event.pull_request.base.ref == 'dev' &&
          github.event.pull_request.head.ref != 'dev' &&
@@ -18,15 +33,25 @@ jobs:
          github.event.pull_request.head.ref == 'dev')
       )
     steps:
-      - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Mint CI-Bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
-            # dev → main promotion: merge commit
+          if [ "$BASE" = "main" ]; then
+            # dev → main: keep merge commit so history is linear for releases
             gh pr merge "$PR" --repo "$REPO" --auto --merge
           else
-            # feature → dev: squash
+            # feature → dev: squash for a clean dev history
             gh pr merge "$PR" --repo "$REPO" --auto --squash
           fi
+          echo "Auto-merge enabled on PR #${PR} (${BASE} target)."

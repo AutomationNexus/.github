@@ -6,9 +6,11 @@ on:
       runner-labels:
         required: false
         default: '["ubuntu-latest"]'
+        type: string
       publish-runner:
         required: false
         default: '["ubuntu-latest"]'
+        type: string
       image-name:
         required: true
         type: string
