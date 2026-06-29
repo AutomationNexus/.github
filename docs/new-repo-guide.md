@@ -15,13 +15,13 @@ realistic model is: **template gives you the files; a one-time bootstrap script 
 | `dev` branch (besides `main`) | ⚠️ only with "include all branches" | bootstrap creates `dev` |
 | `CI_BOT_APP_ID`, `CI_BOT_APP_PRIVATE_KEY` | ❌ no | bootstrap sets repo secrets |
 | `PYPI_API_TOKEN` (group B) | ❌ no | bootstrap sets repo secret |
-| CI-Bot **App installation** on the repo | ❌ no | one click in the App settings (or org "all repos" install) |
+| CI-Bot **App installation** on the repo | ✅ already (org-wide) | The App is installed on **All repositories** org-wide, so every new repo has it automatically |
 | Rulesets (public) / guards (private) | ❌ no | bootstrap applies `rulesets/*.json` |
 | Default branch = dev | ❌ no | bootstrap sets it |
 
-> Tip: if you install the **AutomationNexus CI Bot** App on **All repositories** at the org level,
-> every new repo gets the App automatically and you only need the two App secrets (which are per-repo
-> on Free because org secrets can't target private repos).
+> The **AutomationNexus CI Bot** App is installed org-wide ("All repositories"), so new repos get the
+> App automatically. You still need the two **repo secrets** `CI_BOT_APP_ID` / `CI_BOT_APP_PRIVATE_KEY`
+> per repo (org secrets can't target private repos on Free) — the bootstrap script sets them.
 
 ## Option 1 — Template repos (recommended, click-to-create)
 
@@ -41,6 +41,9 @@ We maintain one **private template repository per group** (marked as GitHub *tem
 
 > The template repos default to `main` (they are scaffolds). The bootstrap step creates `dev` and
 > sets it as the default for main-dev groups (A/B/C/E). Group D stays main-only.
+>
+> Actions are **disabled** on the template repos themselves (a scaffold shouldn't run its own CI).
+> A new repo created from a template has Actions **enabled** by default, so its CI runs normally.
 
 The templates are rebuilt from the canonical starter bundles in `templates/<group>/` of this repo.
 

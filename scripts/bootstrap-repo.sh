@@ -57,5 +57,5 @@ else
   echo "    NOTE: ensure ci.yml has 'auto-revert: true' for this repo."
 fi
 
-echo "==> Done. Remaining manual step (if the App is not installed org-wide):"
-echo "    Install 'AutomationNexus CI Bot' on ${REPO}: https://github.com/apps/automationnexus-ci-bot/installations/new"
+echo "==> Done. The CI-Bot App is installed org-wide ('All repositories'), so no per-repo App install is needed."
+echo "    Add source code, replace REPLACE_ME placeholders, then open a PR into dev."
