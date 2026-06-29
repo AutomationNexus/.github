@@ -1,0 +1,20 @@
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
+    with:
+      runner-labels: '["ubuntu-latest"]'
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

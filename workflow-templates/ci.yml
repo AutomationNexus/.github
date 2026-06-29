@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: automationnexus/.github/.github/workflows/ci.yml@v1
+    with:
+      # "main-dev" (feature -> dev -> main) or "main-only" (feature -> main)
+      branch-model: main-dev
+      # Private repos without rulesets: set true to auto-revert unauthorised pushes
+      auto-revert: false
+      # ["ubuntu-latest"] for public repos; ["linux","x64","k3s","ubuntu-latest"] for ARC self-hosted
+      runner-labels: '["ubuntu-latest"]'
+      python-version: "3.11"
+      node-version: "24"
+      # Toggle the jobs this repo needs:
+      has-frontend: false
+      has-e2e: false
+      has-integration: false
+      has-security: true
+      has-ha-validate: false
+      has-addon-validate: false
+      has-yaml-lint: false
+      has-shellcheck: false
+      # Commands / paths (leave empty to skip a step):
+      lint-paths: src tests
+      security-paths: src
+      pip-install-cmd: 'pip install -e ".[dev]"'
+      test-cmd: 'python -m pytest -q'
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

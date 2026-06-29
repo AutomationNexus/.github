@@ -1,0 +1,11 @@
+(^|/)AGENT-HANDOFF\.md$
+(^|/)CLAUDE\.md$
+(^|/)AGENTS\.md$
+(^|/)\.mcp\.json$
+(^|/)\.claude/
+(^|/)\.cursorrules$
+(^|/)\.(cursor|windsurf|copilot|continuedev|codeium)/
+(^|/)\.aider
+(^|/)opencode\.json$
+(^|/)\.opencode/
+(^|/)docs/agentic/

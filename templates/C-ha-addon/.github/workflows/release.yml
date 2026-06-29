@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "REPLACE_ME_ADDON_DIR/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  addon-release:
+    uses: automationnexus/.github/.github/workflows/release-addon.yml@v1
+    with:
+      config-path: REPLACE_ME_ADDON_DIR/config.yaml

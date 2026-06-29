@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing git tag to rebuild (e.g. v1.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  pypi-release:
+    uses: automationnexus/.github/.github/workflows/release-pypi.yml@v1
+    with:
+      runner-labels: '["ubuntu-latest"]'
+      has-frontend: false
+      tag_name: ${{ inputs.tag_name || '' }}
+    secrets:
+      pypi-api-token: ${{ secrets.PYPI_API_TOKEN }}

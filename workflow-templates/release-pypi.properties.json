@@ -1,0 +1,7 @@
+{
+  "name": "AutomationNexus Release (PyPI)",
+  "description": "Tag from pyproject version, build wheel, publish to PyPI via PYPI_API_TOKEN, GitHub Release. Requires repo secret PYPI_API_TOKEN.",
+  "iconName": "octicon-package",
+  "categories": ["Deployment"],
+  "filePatterns": []
+}

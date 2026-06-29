@@ -1,0 +1,8 @@
+# --- AI tooling: local-only, never commit ---
+opencode.json
+.opencode/
+CLAUDE.md
+AGENTS.md
+.cursorrules
+.cursor/
+.claude/

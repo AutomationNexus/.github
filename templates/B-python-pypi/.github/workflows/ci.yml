@@ -1,0 +1,32 @@
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: automationnexus/.github/.github/workflows/ci.yml@v1
+    with:
+      branch-model: main-dev
+      auto-revert: false
+      runner-labels: '["ubuntu-latest"]'
+      python-version: "3.11"
+      has-frontend: false
+      has-security: true
+      security-paths: src/REPLACE_ME
+      lint-paths: src tests
+      pip-install-cmd: 'pip install -e ".[dev]"'
+      test-cmd: 'python -m pytest -q'
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

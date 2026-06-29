@@ -1,0 +1,27 @@
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: automationnexus/.github/.github/workflows/ci.yml@v1
+    with:
+      branch-model: main-dev
+      auto-revert: false
+      runner-labels: '["ubuntu-latest"]'
+      has-addon-validate: true
+      has-security: false
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
