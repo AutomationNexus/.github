@@ -45,6 +45,8 @@ main push → release-{docker|pypi|addon}.yml → tag (from pyproject) → publi
 
 ## New repos
 
+- **Full guide**: [`docs/new-repo-guide.md`](docs/new-repo-guide.md) — click-to-create + the
+  `scripts/bootstrap-repo.sh` one-shot that wires branches, default branch, secrets, and protection.
 - **Workflow templates**: `.github/workflow-templates/` (add from a repo's Actions tab).
 - **Starter bundles**: `.github/templates/<group>/` — copy the whole `.github/` for the matching group:
   - `A-python-docker`, `B-python-pypi`, `C-ha-addon`, `D-infra-main-only`, `E-ha-config`
@@ -52,6 +54,10 @@ main push → release-{docker|pypi|addon}.yml → tag (from pyproject) → publi
 
 ## AI tooling
 
-Local-only (gitignored, never committed): `opencode.json`, `.opencode/`, `CLAUDE.md`, `AGENTS.md`,
-`.cursor/`, `.claude/`. Shared/committed: `tooling/opencode/**`, `opencode.json.example`,
-`tools/bootstrap-opencode.*`. `.github/dev-only-paths` keeps the local-only files off `main`.
+Current setup: local-only (gitignored): `opencode.json`, `.opencode/`, `CLAUDE.md`, `AGENTS.md`,
+`.cursor/`, `.claude/`; shared/committed: `tooling/opencode/**`, `opencode.json.example`,
+`tools/bootstrap-opencode.*`; `.github/dev-only-paths` keeps the local-only files off `main`.
+
+> Note: this differs from Anthropic's recommended convention (commit `CLAUDE.md`/`.claude/rules/`,
+> gitignore only `CLAUDE.local.md`). See [`docs/ai-files-migration-plan.md`](docs/ai-files-migration-plan.md)
+> for a proposed migration to the standard pattern.
