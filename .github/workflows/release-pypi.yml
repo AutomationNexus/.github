@@ -27,6 +27,11 @@ on:
         required: false
         default: ""
         type: string
+      skip-publish:
+        description: "Build + upload dist artifact only; caller performs PyPI publish (needed because PyPI Trusted Publishing rejects reusable workflows)"
+        required: false
+        default: false
+        type: boolean
     outputs:
       tag_name:
         description: "Resolved release tag"
@@ -110,10 +115,38 @@ jobs:
           path: ${{ inputs.spa-artifact-path }}
           retention-days: 1
 
+  build-dist:
+    name: Build dist
+    if: inputs.skip-publish
+    needs: [prepare, frontend]
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - if: inputs.has-frontend
+        uses: actions/download-artifact@v8
+        with:
+          name: spa-dist-${{ github.run_id }}
+          path: ${{ inputs.spa-artifact-path }}
+      - run: |
+          pip install --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pypi-dist-${{ github.run_id }}
+          path: dist/
+          retention-days: 1
+
   publish:
     name: Publish to PyPI
     needs: [prepare, frontend]
     if: >-
+      !inputs.skip-publish &&
       always() &&
       needs.prepare.result == 'success' &&
       (inputs.has-frontend == false || needs.frontend.result == 'success')
@@ -141,7 +174,7 @@ jobs:
   github-release:
     name: GitHub Release
     needs: [prepare, publish]
-    if: always() && needs.publish.result == 'success'
+    if: ${{ !inputs.skip-publish && always() && needs.publish.result == 'success' }}
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
       - uses: actions/checkout@v6
