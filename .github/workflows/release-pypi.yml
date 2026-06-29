@@ -70,26 +70,19 @@ jobs:
           elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"; KIND="tag_push"
           elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
-            git fetch origin --tags
-            LATEST=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1 | sed -E 's/^(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-            LATEST=${LATEST:-v0.0.0}
-            MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d 'v')
-            MINOR=$(echo "$LATEST" | cut -d. -f2)
-            PATCH=$(echo "$LATEST" | cut -d. -f3)
-            MSG="${HEAD_COMMIT_MESSAGE}"
-            if echo "$MSG" | grep -qiE '\[major\]|major release|breaking'; then
-              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-            elif echo "$MSG" | grep -qiE '\[minor\]|minor release|feature'; then
-              MINOR=$((MINOR + 1)); PATCH=0
-            else
-              PATCH=$((PATCH + 1))
-            fi
-            TAG="v${MAJOR}.${MINOR}.${PATCH}"
+            # Single source of truth = pyproject.toml version. The git tag follows
+            # the package version so tag, wheel and PyPI release always agree.
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            TAG="v${VERSION}"
             KIND="main_push"
-            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-              git tag -a "$TAG" -m "${MSG:0:72}"
-              git push origin "$TAG"
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists — version not bumped in pyproject.toml; nothing to release."
+              echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+              echo "event_kind=noop" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
+            git tag -a "$TAG" -m "${HEAD_COMMIT_MESSAGE:0:72}"
+            git push origin "$TAG"
           else
             echo "Unsupported trigger"; exit 1
           fi
@@ -121,6 +114,7 @@ jobs:
     if: >-
       always() &&
       needs.prepare.result == 'success' &&
+      needs.prepare.outputs.event_kind != 'noop' &&
       (inputs.has-frontend == false || needs.frontend.result == 'success')
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
