@@ -25,16 +25,24 @@ realistic model is: **template gives you the files; a one-time bootstrap script 
 
 ## Option 1 — Template repos (recommended, click-to-create)
 
-We maintain one **template repository per group**: `automationnexus/template-<group>`
-(e.g. `template-python-docker`). Each is a real repo marked as a GitHub *template*, containing the
-group's `.github/` wrappers + starter files.
+We maintain one **private template repository per group** (marked as GitHub *templates*):
+
+| Group | Template repo |
+|------|---------------|
+| A python-docker | `AutomationNexus/template-python-docker` |
+| B python-pypi | `AutomationNexus/template-python-pypi` |
+| C ha-addon | `AutomationNexus/template-ha-addon` |
+| D infra-main-only | `AutomationNexus/template-infra-main-only` |
+| E ha-config | `AutomationNexus/template-ha-config` |
 
 1. On the template repo page → **Use this template → Create a new repository**.
-2. Name it, choose owner `AutomationNexus`, set visibility.
+2. Name it, choose owner `AutomationNexus`, set visibility (private templates can only spawn repos inside the org).
 3. Run the bootstrap script (below) once to wire branches, secrets, default branch, protection.
 
-To (re)create the template repos from the starter bundles in this repo, see
-`templates/<group>/` and run `scripts/make-template-repos.sh` (maintainer task).
+> The template repos default to `main` (they are scaffolds). The bootstrap step creates `dev` and
+> sets it as the default for main-dev groups (A/B/C/E). Group D stays main-only.
+
+The templates are rebuilt from the canonical starter bundles in `templates/<group>/` of this repo.
 
 ## Option 2 — `gh` one-liner from a template
 
