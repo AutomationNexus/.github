@@ -155,7 +155,11 @@ jobs:
   move-tag:
     name: Move nightly Tag
     needs: [detect-changes, lint, test]
-    if: needs.detect-changes.outputs.has_changes == 'true' && needs.lint.result == 'success' && needs.test.result == 'success'
+    if: >-
+      always() &&
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      needs.lint.result == 'success' &&
+      needs.test.result == 'success'
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
       - uses: actions/checkout@v6
@@ -172,7 +176,10 @@ jobs:
   build-and-push:
     name: Build & Push
     needs: [detect-changes, move-tag]
-    if: needs.detect-changes.outputs.has_changes == 'true' && needs.move-tag.result == 'success'
+    if: >-
+      always() &&
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      needs.move-tag.result == 'success'
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 45
     steps:
@@ -202,6 +209,7 @@ jobs:
   container-scan:
     name: Trivy Scan
     needs: [build-and-push]
+    if: always() && needs.build-and-push.result == 'success'
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     continue-on-error: true
     steps:
