@@ -258,11 +258,11 @@ jobs:
             fi
             echo "OK — source is a feature branch (main-only model)."; exit 0
           fi
-          # main-dev: must come from dev
-          if [ "$HEAD_REF" != "dev" ]; then
-            echo "::error::PRs to main must come from 'dev'. Got: $HEAD_REF"; exit 1
+          # main-dev: must come from dev or an automated publish branch (sync/publish-main-*)
+          if [ "$HEAD_REF" != "dev" ] && [[ "$HEAD_REF" != sync/publish-main-* ]]; then
+            echo "::error::PRs to main must come from 'dev' or 'sync/publish-main-*'. Got: $HEAD_REF"; exit 1
           fi
-          echo "OK — source branch is dev."
+          echo "OK — source branch is $HEAD_REF."
 
   guard-main-files:
     name: Guard Main Files
