@@ -49,7 +49,8 @@ Pick one before rollout.
 
 1. Pilot: CognitiveSystems (most developed opencode tooling).
 2. Verify CI + a release still pass.
-3. Roll to ModelDeck, MediaRefinery, Uploadarr, ModelDeck-HAOS, HomeAssistant, ARCRunner.
+3. Roll to ModelDeck, MediaRefinery, Uploadarr, HomeAssistant, ARCRunner. (ModelDeck-HAOS
+   was merged into ModelDeck and archived — no longer a separate repo.)
 
 ## Decisions needed from you
 

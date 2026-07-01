@@ -80,7 +80,7 @@ scripts/bootstrap-repo.sh <owner/repo> <group:A|B|C|D|E> <public|private>
 |------|---------|
 | A python-docker | `ci.yml` `security-paths`; `nightly.yml`+`release.yml` `image-name`; set `pip-install-cmd`/`test-cmd`, frontend/e2e toggles |
 | B python-pypi | `ci.yml` `security-paths`; ensure `pyproject.toml` version; add `PYPI_API_TOKEN` secret |
-| C ha-addon | `release.yml` `config-path` / add-on dir |
+| C ha-addon | Search-and-replace `REPLACE_ME` across `ci.yml`/`nightly.yml`/`release.yml`/`promote-dev-to-main.yml`/`tools/*.py` (image name, add-on dir name(s)); delete the nightly-channel or stable-channel jobs you don't need — see `templates/C-ha-addon/README.md` |
 | D infra-main-only | `build-image.yml` `IMAGE` + Dockerfile path |
 | E ha-config | provide `secrets.yaml.example` |
 
