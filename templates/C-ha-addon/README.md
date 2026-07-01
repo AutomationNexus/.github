@@ -58,8 +58,8 @@ job in `nightly.yml`, and the `exclude-paths` input in `promote-dev-to-main.yml`
 longer needs protecting from a nightly pointer that doesn't exist).
 
 If you only ship a **nightly** channel (no stable add-on tracking a versioned release),
-delete: `sync-addon-stable` in `release.yml`, and `stable-packaging-bump` +
-the `push: dev, paths:` trigger in `promote-dev-to-main.yml`.
+delete: `sync-addon-stable` in `release.yml`, and the `push: dev, paths:` trigger in
+`promote-dev-to-main.yml`.
 
 ## 4. Add your add-on folder(s), then PR into `dev`
 
@@ -73,8 +73,10 @@ Feature branch → PR to `dev` (auto-merge on green). From there, everything is 
 - **App release** (version bump, promoted to `main`) → `release.yml` builds the image, then
   `sync-addon-stable` PRs the new pin to `dev`; merging that PR auto-fires the promote.
 - **Stable-channel-only change** (`REPLACE_ME_ADDON_DIR/**`, no new app release) →
-  `promote-dev-to-main.yml`'s `push: dev, paths:` trigger auto-fires; `.A` bumps if the
-  parent pin didn't change.
+  `promote-dev-to-main.yml`'s `push: dev, paths:` trigger auto-fires; content lands on
+  `main` immediately (version stays unchanged — stable is always bare `X.Y.Z`, no
+  packaging-revision suffix). Existing installed users see it bundled at the next real
+  release; test add-on-only changes via the nightly channel first.
 
 No manual promote clicks needed in the normal flow — `workflow_dispatch` on
 `promote-dev-to-main.yml` stays available as a manual fallback.
