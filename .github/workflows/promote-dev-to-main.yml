@@ -42,12 +42,23 @@ jobs:
             const { data: workflows } = await github.rest.actions.listRepoWorkflows({ owner, repo });
             const ci = workflows.workflows.find((w) => w.path === ".github/workflows/ci.yml");
             if (!ci) { core.setFailed("CI workflow not found"); return; }
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner, repo, workflow_id: ci.id, branch: "dev", per_page: 1,
-            });
-            const run = data.workflow_runs[0];
+
+            // A push-triggered promote (e.g. an add-on-only auto-promote) fires from the
+            // same push event that also triggers ci.yml on dev -- they can race, with
+            // ci.yml's run not registered yet when this check first runs. Poll instead of
+            // checking once.
+            let run;
+            for (let attempt = 1; attempt <= 20; attempt++) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: ci.id, branch: "dev", per_page: 1,
+              });
+              run = data.workflow_runs[0];
+              if (run && run.status === "completed") break;
+              core.info(`Attempt ${attempt}/20: latest dev CI run is ${run ? run.status : "not found yet"}, waiting...`);
+              await new Promise((r) => setTimeout(r, 15000));
+            }
             if (!run || run.conclusion !== "success") {
-              core.setFailed(`Latest dev CI must be success (got ${run?.conclusion ?? "none"})`);
+              core.setFailed(`Latest dev CI must be success (got ${run ? (run.conclusion ?? run.status) : "none"})`);
               return;
             }
             core.info(`Dev CI run ${run.id} succeeded at ${run.updated_at}`);
