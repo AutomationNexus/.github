@@ -7,7 +7,7 @@ replace the `REPLACE_ME*` placeholders, then add the required secrets.
 |-------|---------|--------------|---------|---------|
 | **A — python-docker** | Python service shipping a Docker image | main-dev | `release-docker` + `nightly` | `["ubuntu-latest"]` (public) |
 | **B — python-pypi** | Python package published to PyPI | main-dev | `release-pypi` | `["ubuntu-latest"]` |
-| **C — ha-addon** | Home Assistant add-on | main-dev | `release-addon` + `nightly` | `["ubuntu-latest"]` |
+| **C — ha-addon** | Docker app + in-repo HA add-on folder(s) (proven pattern: ModelDeck) | main-dev | `release-docker` + `nightly` (in-repo pointer bumps, no separate add-on release) | `["ubuntu-latest"]` |
 | **D — infra-main-only** | Image/infra builder, single branch | main-only | custom build | `["ubuntu-latest"]` |
 | **E — ha-config** | Home Assistant config repo | main-dev | none | self-hosted/ubuntu |
 
