@@ -93,7 +93,7 @@ jobs:
               if git cat-file -e "origin/main:${p}" 2>/dev/null; then
                 git checkout origin/main -- "${p}"
               else
-                git rm -r --ignore-unmatch -q "${p}" || true
+                echo "  ${p}: not on main yet, keeping dev's copy as introduced"
               fi
             done <<< "${EXCLUDE_PATHS}"
             if git diff --cached --quiet; then
