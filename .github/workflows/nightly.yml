@@ -54,6 +54,11 @@ on:
         required: false
         default: ""
         type: string
+      build-args:
+        description: "Extra Docker build args (newline-separated KEY=VALUE). COMMIT_SHA and SOURCE_BRANCH are provided automatically."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -199,6 +204,10 @@ jobs:
           push: true
           platforms: ${{ inputs.platforms }}
           tags: ghcr.io/${{ inputs.image-name }}:nightly
+          build-args: |
+            COMMIT_SHA=${{ needs.detect-changes.outputs.target_sha }}
+            SOURCE_BRANCH=dev
+            ${{ inputs.build-args }}
           labels: |
             org.opencontainers.image.title=${{ inputs.image-name }}
             org.opencontainers.image.description=Nightly build from dev

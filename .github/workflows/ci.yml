@@ -16,6 +16,11 @@ on:
         required: false
         default: "main-dev"
         type: string
+      main-source-allow-glob:
+        description: "Extra glob of head branches allowed to PR into main (main-dev model), e.g. sync/publish-main-*"
+        required: false
+        default: ""
+        type: string
       # ── Auto-revert (private repos without rulesets) ─────────────────────────
       auto-revert:
         description: "Force-reset branch on unauthorised direct push"
@@ -248,6 +253,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
           BRANCH_MODEL: ${{ inputs.branch-model }}
+          ALLOW_GLOB: ${{ inputs.main-source-allow-glob }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" != "main" ]; then
             echo "Not a PR to main — guard does not apply. OK."; exit 0
@@ -258,9 +264,14 @@ jobs:
             fi
             echo "OK — source is a feature branch (main-only model)."; exit 0
           fi
-          # main-dev: must come from dev or an automated publish branch (sync/publish-main-*)
-          if [ "$HEAD_REF" != "dev" ] && [[ "$HEAD_REF" != sync/publish-main-* ]]; then
-            echo "::error::PRs to main must come from 'dev' or 'sync/publish-main-*'. Got: $HEAD_REF"; exit 1
+          # main-dev: must come from dev (or an optional repo-configured allow-glob)
+          allowed=no
+          [ "$HEAD_REF" = "dev" ] && allowed=yes
+          if [ "$allowed" = no ] && [ -n "$ALLOW_GLOB" ]; then
+            case "$HEAD_REF" in $ALLOW_GLOB) allowed=yes;; esac
+          fi
+          if [ "$allowed" != yes ]; then
+            echo "::error::PRs to main must come from 'dev'${ALLOW_GLOB:+ or '$ALLOW_GLOB'}. Got: $HEAD_REF"; exit 1
           fi
           echo "OK — source branch is $HEAD_REF."
 

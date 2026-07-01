@@ -46,6 +46,11 @@ on:
         required: false
         default: 90
         type: number
+      build-args:
+        description: "Extra Docker build args (newline-separated KEY=VALUE). COMMIT_SHA and SOURCE_BRANCH are provided automatically."
+        required: false
+        default: ""
+        type: string
     outputs:
       tag_name:
         description: "Resolved release tag"
@@ -160,6 +165,10 @@ jobs:
           platforms: ${{ inputs.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            SOURCE_BRANCH=main
+            ${{ inputs.build-args }}
           provenance: true
           sbom: true
 
