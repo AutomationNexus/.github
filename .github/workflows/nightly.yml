@@ -59,6 +59,13 @@ on:
         required: false
         default: ""
         type: string
+    outputs:
+      has_changes:
+        description: "Whether a new nightly build/push actually ran"
+        value: ${{ jobs.detect-changes.outputs.has_changes }}
+      target_sha:
+        description: "The dev commit SHA that was built"
+        value: ${{ jobs.detect-changes.outputs.target_sha }}
 
 permissions:
   contents: write
