@@ -166,6 +166,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            APP_VERSION=${{ needs.prepare.outputs.tag_name }}
             COMMIT_SHA=${{ github.sha }}
             SOURCE_BRANCH=main
             ${{ inputs.build-args }}
