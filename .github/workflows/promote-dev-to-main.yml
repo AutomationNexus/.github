@@ -78,80 +78,114 @@ jobs:
             echo "Nothing to promote."; exit 0
           fi
 
-          HEAD_BRANCH="dev"
+          # exclude-paths' temp branch is a point-in-time snapshot of main. If another
+          # workflow (e.g. a nightly pointer publish) pushes to main between when the
+          # snapshot was taken and when this PR merges, the merge can conflict. Retry the
+          # whole build+PR+merge cycle from a fresh main snapshot a few times before giving
+          # up -- this is a real, observed race, not a hypothetical.
+          for RETRY in 1 2 3; do
+            HEAD_BRANCH="dev"
 
-          if [ -n "${EXCLUDE_PATHS}" ]; then
-            echo "exclude-paths set — building a promote branch that preserves main's copy of:"
-            echo "${EXCLUDE_PATHS}"
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git fetch origin main
-            TEMP_BRANCH="sync/publish-main-promote-${{ github.run_id }}"
-            git checkout -b "${TEMP_BRANCH}"
-            while IFS= read -r p; do
-              [ -z "${p}" ] && continue
-              if git cat-file -e "origin/main:${p}" 2>/dev/null; then
-                git checkout origin/main -- "${p}"
+            if [ -n "${EXCLUDE_PATHS}" ]; then
+              echo "exclude-paths set (attempt ${RETRY}/3) - building a promote branch that preserves main's copy of:"
+              echo "${EXCLUDE_PATHS}"
+              git checkout dev
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git fetch origin main
+              TEMP_BRANCH="sync/publish-main-promote-${{ github.run_id }}-${RETRY}"
+              git checkout -b "${TEMP_BRANCH}"
+              while IFS= read -r p; do
+                [ -z "${p}" ] && continue
+                if git cat-file -e "origin/main:${p}" 2>/dev/null; then
+                  git checkout origin/main -- "${p}"
+                else
+                  echo "  ${p}: not on main yet, keeping dev's copy as introduced"
+                fi
+              done <<< "${EXCLUDE_PATHS}"
+              if git diff --cached --quiet; then
+                echo "No changes needed to excluded paths - dev already matches main there."
               else
-                echo "  ${p}: not on main yet, keeping dev's copy as introduced"
+                git commit -m "chore(promote): preserve main-owned paths"
               fi
-            done <<< "${EXCLUDE_PATHS}"
-            if git diff --cached --quiet; then
-              echo "No changes needed to excluded paths — dev already matches main there."
-            else
-              git commit -m "chore(promote): preserve main-owned paths"
+              ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
+              if [ "${ahead2}" = "0" ]; then
+                echo "Nothing to promote after excluding main-owned paths."; exit 0
+              fi
+              git push origin "${TEMP_BRANCH}"
+              HEAD_BRANCH="${TEMP_BRANCH}"
             fi
-            ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
-            if [ "${ahead2}" = "0" ]; then
-              echo "Nothing to promote after excluding main-owned paths."; exit 0
-            fi
-            git push origin "${TEMP_BRANCH}"
-            HEAD_BRANCH="${TEMP_BRANCH}"
-          fi
 
-          pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
-               --json number --jq '.[0].number // empty')
-          if [ -z "${pr}" ]; then
-            gh pr create --repo "${REPO}" --base main --head "${HEAD_BRANCH}" \
-              --title "release: promote dev to main" \
-              --body "Automated promotion after dev CI passed. Merges when CI on this PR is green."
             pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
                  --json number --jq '.[0].number // empty')
-          fi
+            if [ -z "${pr}" ]; then
+              gh pr create --repo "${REPO}" --base main --head "${HEAD_BRANCH}" \
+                --title "release: promote dev to main" \
+                --body "Automated promotion after dev CI passed. Merges when CI on this PR is green."
+              pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
+                   --json number --jq '.[0].number // empty')
+            fi
 
-          if [ -z "${pr}" ]; then
-            echo "::error::Promotion PR not found after creation."; exit 1
-          fi
+            if [ -z "${pr}" ]; then
+              echo "::error::Promotion PR not found after creation."; exit 1
+            fi
 
-          head_sha=$(gh pr view "${pr}" --repo "${REPO}" --json headRefOid --jq '.headRefOid')
-          echo "Waiting for CI on promotion PR #${pr} (head ${head_sha})..."
-          for attempt in $(seq 1 120); do
-            runs_json=$(gh api "repos/${REPO}/actions/runs" \
-              --method GET \
-              --field event=pull_request \
-              --field head_sha="${head_sha}" \
-              --field per_page=100 \
-              --jq '[.workflow_runs[] | select(.path != ".github/workflows/auto-merge.yml" and .path != ".github/workflows/promote-dev-to-main.yml")]')
-            ci_count=$(jq '[.[] | select(.path == ".github/workflows/ci.yml")] | length' <<<"${runs_json}")
-            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"${runs_json}")
-            failing=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length' <<<"${runs_json}")
-            echo "attempt=${attempt} ci_count=${ci_count} pending=${pending} failing=${failing}"
-            if [ "${ci_count}" -gt 0 ] && [ "${pending}" -eq 0 ] && [ "${failing}" -eq 0 ]; then
-              echo "Promotion PR #${pr} CI is green."; break
+            head_sha=$(gh pr view "${pr}" --repo "${REPO}" --json headRefOid --jq '.headRefOid')
+            echo "Waiting for CI on promotion PR #${pr} (head ${head_sha})..."
+            for attempt in $(seq 1 120); do
+              runs_json=$(gh api "repos/${REPO}/actions/runs" \
+                --method GET \
+                --field event=pull_request \
+                --field head_sha="${head_sha}" \
+                --field per_page=100 \
+                --jq '[.workflow_runs[] | select(.path != ".github/workflows/auto-merge.yml" and .path != ".github/workflows/promote-dev-to-main.yml")]')
+              ci_count=$(jq '[.[] | select(.path == ".github/workflows/ci.yml")] | length' <<<"${runs_json}")
+              pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"${runs_json}")
+              failing=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length' <<<"${runs_json}")
+              echo "attempt=${attempt} ci_count=${ci_count} pending=${pending} failing=${failing}"
+              if [ "${ci_count}" -gt 0 ] && [ "${pending}" -eq 0 ] && [ "${failing}" -eq 0 ]; then
+                echo "Promotion PR #${pr} CI is green."; break
+              fi
+              if [ "${failing}" -gt 0 ]; then
+                echo "::error::Promotion PR #${pr} CI failed."; exit 1
+              fi
+              if [ "${attempt}" -eq 120 ]; then
+                echo "::error::Timed out waiting for promotion PR #${pr} CI."; exit 1
+              fi
+              sleep 30
+            done
+
+            mergeable=$(gh pr view "${pr}" --repo "${REPO}" --json mergeable --jq '.mergeable')
+            if [ "${mergeable}" = "CONFLICTING" ]; then
+              echo "::warning::Promotion PR #${pr} has merge conflicts (main moved during the snapshot window)."
+              if [ -n "${EXCLUDE_PATHS}" ] && [ "${RETRY}" -lt 3 ]; then
+                echo "Closing #${pr} and retrying from a fresh main snapshot..."
+                gh pr close "${pr}" --repo "${REPO}" --delete-branch
+                sleep 5
+                continue
+              fi
+              echo "::error::Promotion PR #${pr} still conflicts after retries."; exit 1
             fi
-            if [ "${failing}" -gt 0 ]; then
-              echo "::error::Promotion PR #${pr} CI failed."; exit 1
+
+            echo "Merging promotion PR #${pr} (CI-Bot)..."
+            set +e
+            if [ "${HEAD_BRANCH}" != "dev" ]; then
+              merge_out=$(gh pr merge "${pr}" --repo "${REPO}" --merge --delete-branch 2>&1)
+            else
+              merge_out=$(gh pr merge "${pr}" --repo "${REPO}" --merge 2>&1)
             fi
-            if [ "${attempt}" -eq 120 ]; then
-              echo "::error::Timed out waiting for promotion PR #${pr} CI."; exit 1
+            merge_rc=$?
+            set -e
+            echo "${merge_out}"
+            if [ "${merge_rc}" -eq 0 ]; then
+              echo "Merged promotion PR #${pr}."
+              break
             fi
-            sleep 30
+            if echo "${merge_out}" | grep -qi "conflict" && [ -n "${EXCLUDE_PATHS}" ] && [ "${RETRY}" -lt 3 ]; then
+              echo "::warning::Merge failed on a conflict; retrying from a fresh main snapshot..."
+              gh pr close "${pr}" --repo "${REPO}" --delete-branch || true
+              sleep 5
+              continue
+            fi
+            echo "::error::Failed to merge promotion PR #${pr}."; exit 1
           done
-
-          echo "Merging promotion PR #${pr} (CI-Bot)..."
-          if [ "${HEAD_BRANCH}" != "dev" ]; then
-            gh pr merge "${pr}" --repo "${REPO}" --merge --delete-branch
-          else
-            gh pr merge "${pr}" --repo "${REPO}" --merge
-          fi
-          echo "Merged promotion PR #${pr}."
