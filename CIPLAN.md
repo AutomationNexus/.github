@@ -30,8 +30,11 @@
 - Permissions: contents:write, pull-requests:write
 
 ### promote-dev-to-main.yml — PR-based promotion
-- Gate: green dev CI → open or find dev→main PR → gh pr merge --auto --merge
-- Uses GITHUB_TOKEN (no PAT needed)
+- Gate: green dev CI → open or find dev→main PR → wait for its CI → gh pr merge --merge
+- Uses the CI-Bot GitHub App token (never GITHUB_TOKEN/PAT) so ruleset bypass and cascades work
+- Optional `exclude-paths` input: paths main owns exclusively (e.g. a nightly add-on pointer
+  published straight to main by another workflow) are promoted via a throwaway branch with
+  those paths restored to main's content, instead of promoting dev directly
 
 ### release-docker.yml — GHCR Docker publish
 - Inputs: image-name, platforms, runner-labels
@@ -40,9 +43,6 @@
 ### release-pypi.yml — PyPI OIDC publish
 - Jobs: prepare → verify-dev-ci → [lint+test+frontend if main_push] → publish (ubuntu-24.04) → github-release
 - Consumer must set `permissions: id-token: write` + `environment: pypi`
-
-### release-addon.yml — Tag + GitHub Release
-- Version from config.yaml, tag + GH Release
 
 ### nightly.yml — Docker nightly from dev
 - detect-changes → lint+test+frontend → move-tag → build-and-push → trivy-scan
