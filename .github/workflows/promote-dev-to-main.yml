@@ -7,6 +7,16 @@ on:
         required: false
         default: '["ubuntu-latest"]'
         type: string
+      exclude-paths:
+        description: >-
+          Newline-separated list of paths that main owns exclusively and that this promote
+          must never overwrite with dev's copy (e.g. a nightly-channel add-on pointer file
+          published straight to main by another workflow). When set, the promote PR is built
+          from a throwaway branch cut from dev with these paths restored to main's current
+          content, instead of promoting dev directly.
+        required: false
+        default: ""
+        type: string
     secrets:
       ci-bot-app-id:
         required: true
@@ -59,6 +69,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}
+          EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         run: |
           set -euo pipefail
           ahead=$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')
@@ -67,13 +78,44 @@ jobs:
             echo "Nothing to promote."; exit 0
           fi
 
-          pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open \
+          HEAD_BRANCH="dev"
+
+          if [ -n "${EXCLUDE_PATHS}" ]; then
+            echo "exclude-paths set — building a promote branch that preserves main's copy of:"
+            echo "${EXCLUDE_PATHS}"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git fetch origin main
+            TEMP_BRANCH="sync/publish-main-promote-${{ github.run_id }}"
+            git checkout -b "${TEMP_BRANCH}"
+            while IFS= read -r p; do
+              [ -z "${p}" ] && continue
+              if git cat-file -e "origin/main:${p}" 2>/dev/null; then
+                git checkout origin/main -- "${p}"
+              else
+                git rm -r --ignore-unmatch -q "${p}" || true
+              fi
+            done <<< "${EXCLUDE_PATHS}"
+            if git diff --cached --quiet; then
+              echo "No changes needed to excluded paths — dev already matches main there."
+            else
+              git commit -m "chore(promote): preserve main-owned paths"
+            fi
+            ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
+            if [ "${ahead2}" = "0" ]; then
+              echo "Nothing to promote after excluding main-owned paths."; exit 0
+            fi
+            git push origin "${TEMP_BRANCH}"
+            HEAD_BRANCH="${TEMP_BRANCH}"
+          fi
+
+          pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
                --json number --jq '.[0].number // empty')
           if [ -z "${pr}" ]; then
-            gh pr create --repo "${REPO}" --base main --head dev \
+            gh pr create --repo "${REPO}" --base main --head "${HEAD_BRANCH}" \
               --title "release: promote dev to main" \
               --body "Automated promotion after dev CI passed. Merges when CI on this PR is green."
-            pr=$(gh pr list --repo "${REPO}" --base main --head dev --state open \
+            pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
                  --json number --jq '.[0].number // empty')
           fi
 
@@ -107,5 +149,9 @@ jobs:
           done
 
           echo "Merging promotion PR #${pr} (CI-Bot)..."
-          gh pr merge "${pr}" --repo "${REPO}" --merge
+          if [ "${HEAD_BRANCH}" != "dev" ]; then
+            gh pr merge "${pr}" --repo "${REPO}" --merge --delete-branch
+          else
+            gh pr merge "${pr}" --repo "${REPO}" --merge
+          fi
           echo "Merged promotion PR #${pr}."

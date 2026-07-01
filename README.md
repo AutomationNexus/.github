@@ -8,11 +8,10 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 |----------|---------|----------------------|
 | `ci.yml` | Unified CI: guards + hygiene + lint + test + optional frontend/e2e/integration/security/ha/addon | `branch-model`, `auto-revert`, `runner-labels`, `has-*`, `lint-paths`, `security-paths`, `pip-install-cmd`, `test-cmd`, `pre/post-test-cmd`, e2e-* · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 | `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
-| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels` · CI-Bot secrets |
+| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (paths main owns exclusively; promoted via a throwaway branch instead of dev directly) · CI-Bot secrets |
 | `nightly.yml` | Nightly Docker build from dev | `image-name`, `platforms`, `force_run`, `has-frontend`, `coverage-threshold`, `pip-install-cmd`, `test-cmd` |
 | `release-docker.yml` | Tag (from pyproject) → build/push GHCR → Release → Trivy | `image-name`, `platforms`, `tag_name`, `has-frontend`, `has-validation` |
 | `release-pypi.yml` | Tag (from pyproject) → build wheel → PyPI upload (token) → Release | `has-frontend`, `tag_name` · secret: `pypi-api-token` |
-| `release-addon.yml` | Tag + Release from HA add-on `config.yaml` version | `config-path` |
 | `semgrep.yml` | SAST scan | none |
 | `docs.yml` | MkDocs Material → GitHub Pages | none |
 

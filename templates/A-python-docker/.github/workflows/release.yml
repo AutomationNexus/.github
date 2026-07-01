@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     tags: ["v*.*.*"]
+    # Docs/pointer-only commits to main must not rebuild Docker. If this repo also ships
+    # an in-repo HA add-on, add its folders here too (e.g. 'modeldeck/**').
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
     inputs:
       tag_name:

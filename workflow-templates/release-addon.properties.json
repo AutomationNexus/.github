@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Release (HA Add-on)",
-  "description": "Tag + GitHub Release from a Home Assistant add-on config.yaml version. Set config-path.",
-  "iconName": "octicon-home",
-  "categories": ["Deployment"],
-  "filePatterns": []
-}
