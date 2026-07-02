@@ -59,9 +59,11 @@ copy_dir() {
   fi
 }
 
-GROUPS="${1:-A B C D E}"
+# NOTE: do not name this GROUPS -- bash reserves that as a builtin special variable
+# (the invoking user's group IDs) and silently ignores assignments to it.
+TARGET_GROUPS="${1:-A B C D E}"
 
-for GROUP in $GROUPS; do
+for GROUP in $TARGET_GROUPS; do
   REPO_NAME="$(group_repo "$GROUP")"
   REPO="AutomationNexus/${REPO_NAME}"
   DIR_NAME="$(group_dir "$GROUP")"
