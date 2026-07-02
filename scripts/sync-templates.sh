@@ -86,6 +86,8 @@ for GROUP in $TARGET_GROUPS; do
   copy_file "${SRC}/README.md" "${CLONE_DIR}/README.md"
   copy_dir  "${SRC}/tools" "${CLONE_DIR}/tools"
   copy_file "${SRC}/pyproject.toml" "${CLONE_DIR}/pyproject.toml"
+  copy_file "${SRC}/Dockerfile" "${CLONE_DIR}/Dockerfile"
+  copy_file "${SRC}/.dockerignore" "${CLONE_DIR}/.dockerignore"
   copy_dir  "${SRC}/src" "${CLONE_DIR}/src"
   copy_dir  "${SRC}/tests" "${CLONE_DIR}/tests"
   copy_file "${SRC}/mkdocs.yml" "${CLONE_DIR}/mkdocs.yml"
