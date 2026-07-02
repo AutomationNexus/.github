@@ -8,8 +8,12 @@ readme = "README.md"
 dependencies = []
 
 [project.optional-dependencies]
+# REPLACE_ME: nightly.yml's default pip-install-cmd is `pip install -e ".[dev,service]"`
+# -- add your real runtime-only deps to `service` (empty is fine if there are none yet).
+service = []
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "ruff>=0.6",
     "pyyaml",
 ]
@@ -20,3 +24,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+# REPLACE_ME: nightly.yml's default coverage-threshold is 90 -- keep this matched (or
+# override coverage-threshold in nightly.yml) once real code lowers your coverage.
+fail_under = 90
