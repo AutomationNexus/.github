@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Release (Docker)",
-  "description": "Tag from pyproject version, build + push image to GHCR, GitHub Release, Trivy scan. Set image-name.",
-  "iconName": "octicon-container",
-  "categories": ["Deployment"],
-  "filePatterns": []
-}

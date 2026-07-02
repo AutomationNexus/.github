@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Semgrep",
-  "description": "SAST scan via the shared semgrep reusable workflow.",
-  "iconName": "octicon-shield-check",
-  "categories": ["Security"],
-  "filePatterns": []
-}

@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Docs (MkDocs -> Pages)",
-  "description": "Builds MkDocs Material and deploys to GitHub Pages.",
-  "iconName": "octicon-book",
-  "categories": ["Pages"],
-  "filePatterns": []
-}
