@@ -1,0 +1,12 @@
+# Local test/build artifacts from verifying templates/<group>/ bundles before committing.
+# (Runtime .gitignore for repos *created from* the templates lives in
+# templates/_shared/gitignore -- this file is only for this repo's own working tree.)
+.venvtest/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/

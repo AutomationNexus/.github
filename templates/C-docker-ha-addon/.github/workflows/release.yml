@@ -43,20 +43,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: dev
+
+      - name: Check stable add-on folder exists
+        id: check
+        run: |
+          if [ -d "REPLACE_ME_ADDON_DIR" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::REPLACE_ME_ADDON_DIR does not exist yet -- skipping stable add-on pin sync. See README step 3 to set up the stable channel."
+          fi
+
       - name: Mint CI-Bot token
+        if: steps.check.outputs.exists == 'true'
         id: bot-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
-      - uses: actions/checkout@v6
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/checkout@v6
         with:
           ref: dev
           token: ${{ steps.bot-token.outputs.token }}
-      - uses: actions/setup-python@v6
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Check if sync is needed
+        if: steps.check.outputs.exists == 'true'
         id: sync_check
         run: |
           set -euo pipefail
@@ -72,7 +90,7 @@ jobs:
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Apply stable pin
-        if: steps.sync_check.outputs.needed == 'true'
+        if: steps.check.outputs.exists == 'true' && steps.sync_check.outputs.needed == 'true'
         run: |
           set -euo pipefail
           TAG="${{ needs.docker-release.outputs.tag_name }}"
@@ -81,7 +99,7 @@ jobs:
           python tools/validate_ha_addon.py
       - name: Open PR to dev
         id: cpr
-        if: steps.sync_check.outputs.needed == 'true'
+        if: steps.check.outputs.exists == 'true' && steps.sync_check.outputs.needed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ steps.bot-token.outputs.token }}
@@ -94,7 +112,7 @@ jobs:
           base: dev
           delete-branch: true
       - name: Auto-merge sync PR
-        if: steps.sync_check.outputs.needed == 'true' && steps.cpr.outputs.pull-request-number != ''
+        if: steps.check.outputs.exists == 'true' && steps.sync_check.outputs.needed == 'true' && steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}

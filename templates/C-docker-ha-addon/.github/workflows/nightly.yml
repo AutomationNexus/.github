@@ -41,32 +41,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Checkout built dev commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.nightly.outputs.target_sha }}
+
+      - name: Check nightly add-on folder exists
+        id: check
+        run: |
+          if [ -d "REPLACE_ME_ADDON_DIR-nightly" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::REPLACE_ME_ADDON_DIR-nightly does not exist yet -- skipping nightly add-on pointer roll. See README step 3 to set up the nightly channel."
+          fi
+
       - name: Mint CI-Bot token
+        if: steps.check.outputs.exists == 'true'
         id: bot-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
 
-      - name: Checkout built dev commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.nightly.outputs.target_sha }}
       - name: Resolve parent version
+        if: steps.check.outputs.exists == 'true'
         id: version
         run: |
           V=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           echo "v=$V" >> "$GITHUB_OUTPUT"
 
       - name: Checkout main (add-on pointer lives here)
+        if: steps.check.outputs.exists == 'true'
         uses: actions/checkout@v6
         with:
           ref: main
           token: ${{ steps.bot-token.outputs.token }}
-      - uses: actions/setup-python@v6
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Roll nightly add-on pointer
+        if: steps.check.outputs.exists == 'true'
         id: roll
         run: |
           set -euo pipefail
@@ -79,6 +95,7 @@ jobs:
           echo "new_version=$NEW" >> "$GITHUB_OUTPUT"
 
       - name: Publish pointer to main (branch + PR + CI-wait + admin-merge)
+        if: steps.check.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -92,7 +109,7 @@ jobs:
           git checkout -b "${BRANCH}"
           git add REPLACE_ME_ADDON_DIR-nightly/config.yaml REPLACE_ME_ADDON_DIR-nightly/CHANGELOG.md
           if git diff --cached --quiet; then
-            echo "No changes to the nightly pointer — nothing to publish."; exit 0
+            echo "No changes to the nightly pointer -- nothing to publish."; exit 0
           fi
           git commit -m "chore(nightly): publish REPLACE_ME_ADDON_DIR-nightly ${NEW} to store"
           git push origin "${BRANCH}"
@@ -105,7 +122,7 @@ jobs:
 
           CI must pass before merge."
           PR=$(gh pr list --repo "${REPO}" --base main --head "${BRANCH}" --state open --json number --jq '.[0].number')
-          echo "Opened PR #${PR} — waiting for main CI..."
+          echo "Opened PR #${PR} -- waiting for main CI..."
 
           sleep 15
           for _ in $(seq 1 60); do

@@ -1,0 +1,16 @@
+.git
+.githooks
+.github
+.venv
+.venvtest
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+*.egg-info
+tests/
+docs/
+tooling/
+tools/
+.opencode
+opencode.json
