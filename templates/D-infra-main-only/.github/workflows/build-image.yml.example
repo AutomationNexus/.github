@@ -17,7 +17,8 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/automationnexus/REPLACE_ME
+  # REPLACE_ME: must be lowercase -- Docker/GHCR rejects uppercase repository names.
+  IMAGE: ghcr.io/automationnexus/replace-me
 
 jobs:
   build:
