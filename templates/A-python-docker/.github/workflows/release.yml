@@ -27,7 +27,8 @@ jobs:
     uses: automationnexus/.github/.github/workflows/release-docker.yml@v1
     with:
       runner-labels: '["ubuntu-latest"]'
-      image-name: automationnexus/REPLACE_ME
+      # REPLACE_ME: must be lowercase -- Docker/GHCR rejects uppercase repository names.
+      image-name: automationnexus/replace-me
       platforms: linux/amd64
       tag_name: ${{ inputs.tag_name || '' }}
       has-frontend: false

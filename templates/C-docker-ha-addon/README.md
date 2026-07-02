@@ -47,7 +47,7 @@ Search for `REPLACE_ME` across the repo and fill in:
 
 | Placeholder | What |
 |---|---|
-| `REPLACE_ME` (image name, in `ci.yml`/`nightly.yml`/`release.yml`) | `automationnexus/<your-image>` |
+| `REPLACE_ME` (image name, in `ci.yml`/`nightly.yml`/`release.yml`) | `automationnexus/<your-image, lowercase>` -- Docker/GHCR rejects uppercase repository names |
 | `REPLACE_ME_ADDON_DIR` | Your stable-channel add-on folder name (holds `config.yaml`) |
 | `REPLACE_ME_ADDON_DIR-nightly` | Your nightly-channel add-on folder name — **delete every reference to this** (and the `roll-nightly-addon` job in `nightly.yml`, the `exclude-paths` block in `promote-dev-to-main.yml`) if you don't ship a nightly channel |
 | `REPLACE_ME_IMAGE_NAME` (in `tools/check_build_from.py`, `tools/sync_haos_addon.py`) | The image name segment inside `BUILD_FROM` |

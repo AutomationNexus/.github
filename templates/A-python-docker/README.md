@@ -48,7 +48,9 @@ so no per-repo App install is needed.
 
 - `.github/workflows/ci.yml`: `security-paths: src/<pkg>`; set `has-frontend` / `has-e2e`,
   `pip-install-cmd`, `test-cmd`, `lint-paths`.
-- `.github/workflows/nightly.yml` + `release.yml`: `image-name: automationnexus/<repo>`.
+- `.github/workflows/nightly.yml` + `release.yml`: `image-name: automationnexus/<repo, lowercase>`
+  -- Docker/GHCR rejects uppercase repository names even if your GitHub repo name has
+  uppercase letters (e.g. `MyService` -> `image-name: automationnexus/myservice`).
 
 ## 4. Add your code, then PR into `dev`
 

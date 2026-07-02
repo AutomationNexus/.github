@@ -25,7 +25,8 @@ _FORBIDDEN_PARENT = "0.0.0"
 # REPLACE_ME: set these to your add-on folder names and Docker image name before use.
 STABLE_DIR = "REPLACE_ME_ADDON_DIR"
 NIGHTLY_DIR = "REPLACE_ME_ADDON_DIR-nightly"
-IMAGE_NAME = "REPLACE_ME_IMAGE_NAME"  # the image name segment inside BUILD_FROM, e.g. "myapp"
+IMAGE_NAME = "REPLACE_ME_IMAGE_NAME"  # image name segment inside BUILD_FROM -- must be
+# lowercase, e.g. "myapp" (Docker/GHCR rejects uppercase repository names)
 
 ADDON_SPECS: dict[str, dict[str, str]] = {
     STABLE_DIR: {"slug": STABLE_DIR, "channel": "stable"},
