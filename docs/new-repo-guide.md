@@ -45,7 +45,10 @@ We maintain one **private template repository per group** (marked as GitHub *tem
 > Actions are **disabled** on the template repos themselves (a scaffold shouldn't run its own CI).
 > A new repo created from a template has Actions **enabled** by default, so its CI runs normally.
 
-The templates are rebuilt from the canonical starter bundles in `templates/<group>/` of this repo.
+The templates are rebuilt from the canonical starter bundles in `templates/<group>/` of this
+repo via `scripts/sync-templates.sh` — run it after any change to a starter bundle. It does
+not happen automatically; verify with the "After bootstrap" checks below if you're unsure a
+template repo is current.
 
 ## Option 2 — `gh` one-liner from a template
 
