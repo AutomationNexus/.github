@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus CI",
-  "description": "Unified reusable CI (guards, lint, test, optional frontend/e2e/security). Thin wrapper calling automationnexus/.github ci.yml@v1.",
-  "iconName": "octicon-check-circle",
-  "categories": ["Continuous integration"],
-  "filePatterns": []
-}

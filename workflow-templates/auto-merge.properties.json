@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Auto-merge",
-  "description": "Auto-merges qualifying PRs after CI passes, using the CI-Bot GitHub App so downstream workflows trigger.",
-  "iconName": "octicon-git-merge",
-  "categories": ["Continuous integration"],
-  "filePatterns": []
-}

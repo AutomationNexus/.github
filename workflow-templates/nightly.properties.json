@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Nightly Build",
-  "description": "Nightly Docker build from dev (change detection, lint, test, push :nightly, Trivy). Set image-name.",
-  "iconName": "octicon-moon",
-  "categories": ["Continuous integration"],
-  "filePatterns": []
-}

@@ -1,7 +1,0 @@
-{
-  "name": "AutomationNexus Promote dev to main",
-  "description": "Manual dev -> main promotion: verifies dev CI, opens the PR, waits for its CI, merges via CI-Bot App.",
-  "iconName": "octicon-rocket",
-  "categories": ["Deployment"],
-  "filePatterns": []
-}
