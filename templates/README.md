@@ -30,3 +30,20 @@ Use `runner-labels: '["linux","x64","k3s","ubuntu-latest"]'` in every wrapper.
 - Local-only (gitignored, never committed): `opencode.json`, `.opencode/`, `CLAUDE.md`, `AGENTS.md`.
 - Shared templates (committed): `tooling/opencode/**`, `opencode.json.example`, `tools/bootstrap-opencode.*`.
 - `.github/dev-only-paths` blocks the local-only files from ever reaching `main`.
+
+## Keeping the 5 template repos in sync -- mandatory after any change here
+
+The 5 `AutomationNexus/template-*` GitHub repos (`template-python-docker`,
+`template-python-pypi`, `template-ha-addon`, `template-infra-main-only`,
+`template-ha-config`) are **not** auto-synced from this directory -- they were caught
+badly out of date once already (missing an org-wide bug fix, and one still had an
+entire superseded pattern). After changing anything under `templates/<group>/`, run:
+
+```bash
+scripts/sync-templates.sh          # all 5 groups
+scripts/sync-templates.sh C        # just one group
+```
+
+before considering the change done. This is not optional -- it's exactly the kind of
+gap that silently reintroduces already-fixed bugs into every new repo created
+afterward.

@@ -39,7 +39,7 @@ Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for s
 feature → PR to dev → ci.yml (guards/lint/test/…) + semgrep → auto-merge (CI-Bot, after green) → dev
 dev → nightly.yml (build :nightly)
 promote-dev-to-main (CI-Bot): dev CI green → dev→main PR → its CI green → merge
-main push → release-{docker|pypi|addon}.yml → tag (from pyproject) → publish → GitHub Release
+main push → release-{docker|pypi}.yml → tag (from pyproject) → publish → GitHub Release
 ```
 
 ## New repos
@@ -50,6 +50,7 @@ main push → release-{docker|pypi|addon}.yml → tag (from pyproject) → publi
 - **Starter bundles**: `.github/templates/<group>/` — copy the whole `.github/` for the matching group:
   - `A-python-docker`, `B-python-pypi`, `C-ha-addon`, `D-infra-main-only`, `E-ha-config`
   - See `.github/templates/README.md` for the group table and per-group setup.
+  - **After editing any starter bundle, run `scripts/sync-templates.sh`** — it does not auto-sync to the `AutomationNexus/template-*` repos.
 
 ## AI tooling
 
