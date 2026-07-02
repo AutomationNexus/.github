@@ -42,7 +42,9 @@ What it does: sets the CI-Bot App repo secrets, creates `dev` as default, and
 
 ## 3. Add files
 
-- Provide `secrets.yaml.example`; the HA validate job copies it to `secrets.yaml` automatically.
+- `configuration.yaml` + `secrets.yaml.example` ship with a minimal valid stub (see "Out of
+  the box" below) — replace with your real config. The HA validate job copies
+  `secrets.yaml.example` to `secrets.yaml` automatically.
 
 ## 4. Edit config, then PR into `dev`
 
@@ -55,3 +57,19 @@ Feature branch → PR to `dev` (auto-merge on green). Promote dev→main with th
 - Usually private on Free → protection is CI guards + `auto-revert: true` (already set).
   If public, the bootstrap applies rulesets instead.
 - No release/nightly (config repo).
+
+## Out of the box
+
+This template ships a minimal valid Home Assistant config, not an empty repo — CI passes
+unmodified:
+
+- [x] `configuration.yaml` (bare `default_config:` + empty `automations.yaml`/`scripts.yaml`/
+  `scenes.yaml`) — passes the `ha-validate` job's `check_config` and `.yamllint.yml`-relaxed
+  `yamllint .` as shipped.
+- [x] `secrets.yaml.example` — copied to `secrets.yaml` automatically by CI.
+- [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
+  `dev`/`main` are blocked locally as well as by CI guards, once you run
+  `tools\install-githooks.cmd`.
+- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
+  (or `.ps1`) to get a working local OpenCode setup.
+- [ ] Replace the stub config with your real one (step 3 above).

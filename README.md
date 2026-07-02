@@ -47,7 +47,7 @@ main push → release-{docker|pypi}.yml → tag (from pyproject) → publish →
 - **Full guide**: [`docs/new-repo-guide.md`](docs/new-repo-guide.md) — click-to-create + the
   `scripts/bootstrap-repo.sh` one-shot that wires branches, default branch, secrets, and protection.
 - **Starter bundles**: `.github/templates/<group>/` — copy the whole `.github/` for the matching group:
-  - `A-python-docker`, `B-python-pypi`, `C-ha-addon`, `D-infra-main-only`, `E-ha-config`
+  - `A-python-docker`, `B-python-pypi`, `C-docker-ha-addon`, `D-infra-main-only`, `E-ha-config`
   - See `.github/templates/README.md` for the group table and per-group setup.
   - **After editing any starter bundle, run `scripts/sync-templates.sh`** — it does not auto-sync to the `AutomationNexus/template-*` repos.
 

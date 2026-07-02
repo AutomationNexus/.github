@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Resync all 5 template-* repos from templates/<group>/ (the canonical starter bundles).
-# Run this after ANY change to templates/<group>/ — the template repos do NOT auto-sync.
+# Resync all 5 template-* repos from templates/_shared/ (base layer, every group) +
+# templates/<group>/ (group-specific overlay) -- together the canonical starter bundles.
+# Run this after ANY change under templates/ -- the template repos do NOT auto-sync.
 # This is what makes "templates are rebuilt from the canonical starter bundles" (see
 # templates/README.md) actually true, instead of an aspirational doc line.
 #
@@ -15,6 +16,7 @@
 set -euo pipefail
 
 TEMPLATES_DIR="$(cd "$(dirname "$0")/../templates" && pwd)"
+SHARED="${TEMPLATES_DIR}/_shared"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -22,7 +24,7 @@ group_repo() {
   case "$1" in
     A) echo "template-python-docker" ;;
     B) echo "template-python-pypi" ;;
-    C) echo "template-ha-addon" ;;
+    C) echo "template-docker-ha-addon" ;;
     D) echo "template-infra-main-only" ;;
     E) echo "template-ha-config" ;;
     *) echo "unknown group: $1" >&2; exit 1 ;;
@@ -33,10 +35,28 @@ group_dir() {
   case "$1" in
     A) echo "A-python-docker" ;;
     B) echo "B-python-pypi" ;;
-    C) echo "C-ha-addon" ;;
+    C) echo "C-docker-ha-addon" ;;
     D) echo "D-infra-main-only" ;;
     E) echo "E-ha-config" ;;
   esac
+}
+
+# Copy a file if it exists at $1, to destination $2 (creating parent dirs).
+copy_file() {
+  local src="$1" dest="$2"
+  if [ -f "$src" ]; then
+    mkdir -p "$(dirname "$dest")"
+    cp "$src" "$dest"
+  fi
+}
+
+# Copy a directory's contents if it exists at $1, into destination $2.
+copy_dir() {
+  local src="$1" dest="$2"
+  if [ -d "$src" ]; then
+    mkdir -p "$dest"
+    cp -r "${src}/." "${dest}/"
+  fi
 }
 
 GROUPS="${1:-A B C D E}"
@@ -51,13 +71,32 @@ for GROUP in $GROUPS; do
   CLONE_DIR="${WORK_DIR}/${GROUP}"
   gh repo clone "$REPO" "$CLONE_DIR" -- --quiet
 
-  cp -r "${SRC}/.github/." "${CLONE_DIR}/.github/"
-  cp "${SRC}/README.md" "${CLONE_DIR}/README.md"
-  if [ -d "${SRC}/tools" ]; then
-    mkdir -p "${CLONE_DIR}/tools"
-    cp -r "${SRC}/tools/." "${CLONE_DIR}/tools/"
-  fi
+  # ---- 1. _shared/ base layer (every group gets this) ----
+  copy_file "${SHARED}/gitignore" "${CLONE_DIR}/.gitignore"
+  copy_dir  "${SHARED}/githooks" "${CLONE_DIR}/.githooks"
+  copy_dir  "${SHARED}/tools" "${CLONE_DIR}/tools"
+  copy_dir  "${SHARED}/tooling/opencode" "${CLONE_DIR}/tooling/opencode"
+  copy_file "${SHARED}/opencode.json.example" "${CLONE_DIR}/opencode.json.example"
+  copy_file "${SHARED}/dev-only-paths" "${CLONE_DIR}/.github/dev-only-paths"
+
+  # ---- 2. group-specific overlay (canonical starter bundle, wins on conflicts) ----
+  copy_dir  "${SRC}/.github" "${CLONE_DIR}/.github"
+  copy_file "${SRC}/README.md" "${CLONE_DIR}/README.md"
+  copy_dir  "${SRC}/tools" "${CLONE_DIR}/tools"
+  copy_file "${SRC}/pyproject.toml" "${CLONE_DIR}/pyproject.toml"
+  copy_dir  "${SRC}/src" "${CLONE_DIR}/src"
+  copy_dir  "${SRC}/tests" "${CLONE_DIR}/tests"
+  copy_file "${SRC}/mkdocs.yml" "${CLONE_DIR}/mkdocs.yml"
+  copy_dir  "${SRC}/docs" "${CLONE_DIR}/docs"
+  copy_file "${SRC}/configuration.yaml" "${CLONE_DIR}/configuration.yaml"
+  copy_file "${SRC}/automations.yaml" "${CLONE_DIR}/automations.yaml"
+  copy_file "${SRC}/scripts.yaml" "${CLONE_DIR}/scripts.yaml"
+  copy_file "${SRC}/scenes.yaml" "${CLONE_DIR}/scenes.yaml"
+  copy_file "${SRC}/secrets.yaml.example" "${CLONE_DIR}/secrets.yaml.example"
+  copy_file "${SRC}/.yamllint.yml" "${CLONE_DIR}/.yamllint.yml"
+
   find "${CLONE_DIR}" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+  find "${CLONE_DIR}" -name "*.egg-info" -type d -exec rm -rf {} + 2>/dev/null || true
 
   (
     cd "$CLONE_DIR"
@@ -65,7 +104,7 @@ for GROUP in $GROUPS; do
       echo "    already in sync"
     else
       git add -A
-      git commit -q -m "chore: resync from automationnexus/.github templates/${DIR_NAME}"
+      git commit -q -m "chore: resync from automationnexus/.github templates/_shared + ${DIR_NAME}"
       git push -q origin main
       echo "    pushed sync commit"
     fi

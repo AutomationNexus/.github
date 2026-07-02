@@ -1,0 +1,25 @@
+# REPLACE_ME: site_name/site_url/repo_url/repo_name for this repo.
+site_name: REPLACE_ME
+site_url: https://automationnexus.github.io/REPLACE_ME/
+repo_url: https://github.com/automationnexus/REPLACE_ME
+repo_name: automationnexus/REPLACE_ME
+edit_uri: edit/dev/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+nav:
+  - Home: README.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true

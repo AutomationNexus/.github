@@ -7,7 +7,7 @@ replace the `REPLACE_ME*` placeholders, then add the required secrets.
 |-------|---------|--------------|---------|---------|
 | **A — python-docker** | Python service shipping a Docker image | main-dev | `release-docker` + `nightly` | `["ubuntu-latest"]` (public) |
 | **B — python-pypi** | Python package published to PyPI | main-dev | `release-pypi` | `["ubuntu-latest"]` |
-| **C — ha-addon** | Docker app + in-repo HA add-on folder(s) (proven pattern: ModelDeck) | main-dev | `release-docker` + `nightly` (in-repo pointer bumps, no separate add-on release) | `["ubuntu-latest"]` |
+| **C — docker-ha-addon** | Docker app + in-repo HA add-on folder(s) (proven pattern: ModelDeck) | main-dev | `release-docker` + `nightly` (in-repo pointer bumps, no separate add-on release) | `["ubuntu-latest"]` |
 | **D — infra-main-only** | Image/infra builder, single branch | main-only | custom build | `["ubuntu-latest"]` |
 | **E — ha-config** | Home Assistant config repo | main-dev | none | self-hosted/ubuntu |
 
@@ -34,7 +34,7 @@ Use `runner-labels: '["linux","x64","k3s","ubuntu-latest"]'` in every wrapper.
 ## Keeping the 5 template repos in sync -- mandatory after any change here
 
 The 5 `AutomationNexus/template-*` GitHub repos (`template-python-docker`,
-`template-python-pypi`, `template-ha-addon`, `template-infra-main-only`,
+`template-python-pypi`, `template-docker-ha-addon`, `template-infra-main-only`,
 `template-ha-config`) are **not** auto-synced from this directory -- they were caught
 badly out of date once already (missing an org-wide bug fix, and one still had an
 entire superseded pattern). After changing anything under `templates/<group>/`, run:

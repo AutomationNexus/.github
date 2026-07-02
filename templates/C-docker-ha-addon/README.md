@@ -22,7 +22,7 @@ stable, so both channels have to be folders on `main`, not separate repos or bra
 
 ```bash
 gh repo create AutomationNexus/<your-repo> \
-  --template AutomationNexus/template-ha-addon \
+  --template AutomationNexus/template-docker-ha-addon \
   --private --clone
 ```
 
@@ -94,6 +94,27 @@ No manual promote clicks needed in the normal flow — `workflow_dispatch` on
   `main` to diff against — `bump_haos_version.py` and the shared `exclude-paths` logic both
   handle "path doesn't exist on old main yet" as "nothing to protect / nothing to diff",
   not as an error or a deletion.
-- CI runs add-on metadata validation (`has-addon-validate: true`).
+- CI ships with `has-addon-validate: false` — flip it to `true` once you've added
+  `repository.yaml` and your add-on folder(s) (see the placeholder table above); the check
+  fails on a fresh repo since there's no add-on metadata to validate yet.
 - Private repo: protection is CI guards + `auto-revert: true` (already set). Public gets
   rulesets.
+
+## Out of the box
+
+This template ships a working, green-CI Python project as-is, before you replace anything:
+
+- [x] `pyproject.toml` + `src/REPLACE_ME/` + `tests/test_smoke.py` — `pip install -e ".[dev]"` +
+  `python -m pytest -q` pass unmodified. `security-paths: src/REPLACE_ME` already matches the
+  stub package, so `bandit` passes too.
+- [x] `has-addon-validate: false` by default — CI is green before you've added an add-on
+  folder. Flip to `true` once `repository.yaml` + your add-on folder(s) exist.
+- [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
+  `dev`/`main` are blocked locally as well as by CI guards, once you run
+  `tools\install-githooks.cmd`.
+- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
+  (or `.ps1`) to get a working local OpenCode setup.
+- [x] `mkdocs.yml` + `docs/README.md` + `.github/workflows/docs.yml` — MkDocs Material site,
+  deploys on push to `main` if GitHub Pages is enabled. Delete all three if you don't want docs.
+- [ ] Rename `src/REPLACE_ME/` and fill in every other `REPLACE_ME*` placeholder (see table
+  above) once you know your real package/image/add-on names.

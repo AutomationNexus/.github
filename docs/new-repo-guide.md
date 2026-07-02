@@ -31,7 +31,7 @@ We maintain one **private template repository per group** (marked as GitHub *tem
 |------|---------------|
 | A python-docker | `AutomationNexus/template-python-docker` |
 | B python-pypi | `AutomationNexus/template-python-pypi` |
-| C ha-addon | `AutomationNexus/template-ha-addon` |
+| C docker-ha-addon | `AutomationNexus/template-docker-ha-addon` |
 | D infra-main-only | `AutomationNexus/template-infra-main-only` |
 | E ha-config | `AutomationNexus/template-ha-config` |
 
@@ -83,7 +83,7 @@ scripts/bootstrap-repo.sh <owner/repo> <group:A|B|C|D|E> <public|private>
 |------|---------|
 | A python-docker | `ci.yml` `security-paths`; `nightly.yml`+`release.yml` `image-name`; set `pip-install-cmd`/`test-cmd`, frontend/e2e toggles |
 | B python-pypi | `ci.yml` `security-paths`; ensure `pyproject.toml` version; add `PYPI_API_TOKEN` secret |
-| C ha-addon | Search-and-replace `REPLACE_ME` across `ci.yml`/`nightly.yml`/`release.yml`/`promote-dev-to-main.yml`/`tools/*.py` (image name, add-on dir name(s)); delete the nightly-channel or stable-channel jobs you don't need — see `templates/C-ha-addon/README.md` |
+| C docker-ha-addon | Search-and-replace `REPLACE_ME` across `ci.yml`/`nightly.yml`/`release.yml`/`promote-dev-to-main.yml`/`tools/*.py` (image name, add-on dir name(s)); delete the nightly-channel or stable-channel jobs you don't need — see `templates/C-docker-ha-addon/README.md` |
 | D infra-main-only | `build-image.yml` `IMAGE` + Dockerfile path |
 | E ha-config | provide `secrets.yaml.example` |
 

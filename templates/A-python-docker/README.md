@@ -61,3 +61,20 @@ Auto-merge merges when CI is green. Promote dev→main with the **Promote dev to
 - **Private repo:** rulesets aren't available on GitHub Free, so protection is the CI guards +
   `auto-revert: true` (already set in `ci.yml`). Public repos get rulesets via bootstrap.
 - Docker/GHCR push uses the built-in `GITHUB_TOKEN` — no extra secret.
+
+## Out of the box
+
+This template ships a working, green-CI Python project as-is, before you replace anything:
+
+- [x] `pyproject.toml` + `src/REPLACE_ME/` + `tests/test_smoke.py` — `pip install -e ".[dev]"` +
+  `python -m pytest -q` pass unmodified. `security-paths: src/REPLACE_ME` already matches the
+  stub package, so `bandit` passes too.
+- [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
+  `dev`/`main` are blocked locally as well as by CI guards, once you run
+  `tools\install-githooks.cmd`.
+- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
+  (or `.ps1`) to get a working local OpenCode setup.
+- [x] `mkdocs.yml` + `docs/README.md` + `.github/workflows/docs.yml` — MkDocs Material site,
+  deploys on push to `main` if GitHub Pages is enabled. Delete all three if you don't want docs.
+- [ ] Rename `src/REPLACE_ME/` and the `REPLACE_ME` placeholders (see step 3 above) once you
+  know your real package/image name — not required for CI to pass, just for the name to be real.

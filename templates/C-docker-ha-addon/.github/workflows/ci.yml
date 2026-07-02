@@ -36,7 +36,9 @@ jobs:
       # published to main via a sync/publish-main-* branch (see nightly.yml/release.yml),
       # which needs to be an allowed PR source into main.
       main-source-allow-glob: 'sync/publish-main-*'
-      has-addon-validate: true
+      # Flip to true once you've added repository.yaml + your add-on folder(s) (see README
+      # step 3) -- false out of the box so CI stays green before add-on setup is done.
+      has-addon-validate: false
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

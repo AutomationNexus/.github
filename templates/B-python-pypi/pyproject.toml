@@ -1,0 +1,22 @@
+[project]
+# REPLACE_ME: rename the project and the src/REPLACE_ME package (see README step 3).
+name = "REPLACE_ME"
+version = "0.1.0"
+description = "REPLACE_ME"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "build",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

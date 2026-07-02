@@ -1,0 +1,9 @@
+# REPLACE_ME: minimal valid config so CI (ha-validate) is green out of the box.
+# https://www.home-assistant.io/docs/configuration/
+
+default_config:
+
+# UI-managed automations/scripts/scenes -- safe empty defaults.
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

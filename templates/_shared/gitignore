@@ -1,0 +1,46 @@
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+tmp/
+
+# Node (if this repo has a frontend/)
+node_modules/
+coverage/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local operator and AI tool state
+AGENT-HANDOFF.md
+AGENTS.md
+CLAUDE.md
+.cursor/
+.claude/
+.mcp.json
+.cursorrules
+.aider*
+.windsurf/
+.copilot/
+.continuedev/
+.codeium/
+opencode.json
+.opencode/

@@ -49,3 +49,15 @@ Rename `.github/workflows/build-image.yml.example` → `build-image.yml` and set
 
 `branch-model: main-only` — feature branches → PR to `main`. Image push uses the built-in
 `GITHUB_TOKEN` (no extra secret).
+
+## Out of the box
+
+- [x] `ci.yml` ships with no `lint-paths`/`pip-install-cmd`/`test-cmd`/`has-security` set, so
+  the guard/hygiene jobs run and pass immediately — lint/test/security jobs simply don't fire
+  until you add code and set those inputs. Nothing to fix before your first PR.
+- [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
+  `main` are blocked locally as well as by CI guards, once you run `tools\install-githooks.cmd`.
+- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
+  (or `.ps1`) to get a working local OpenCode setup.
+- [ ] Rename `build-image.yml.example` → `build-image.yml` and set `IMAGE` (step 3 above) once
+  you're ready to build/push an image.
