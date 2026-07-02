@@ -18,7 +18,11 @@ set -euo pipefail
 TEMPLATES_DIR="$(cd "$(dirname "$0")/../templates" && pwd)"
 SHARED="${TEMPLATES_DIR}/_shared"
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+# `|| true`: on Windows, a git/gh subprocess can still hold a file handle open in
+# $WORK_DIR for a moment after this script's own work is done, making `rm -rf` fail here.
+# Since this is an EXIT trap, an unhandled failure here would silently become the whole
+# script's reported exit code even though the actual sync work already succeeded.
+trap 'rm -rf "$WORK_DIR" 2>/dev/null || true' EXIT
 
 group_repo() {
   case "$1" in
@@ -61,9 +65,15 @@ copy_dir() {
 
 # NOTE: do not name this GROUPS -- bash reserves that as a builtin special variable
 # (the invoking user's group IDs) and silently ignores assignments to it.
-TARGET_GROUPS="${1:-A B C D E}"
+# Accept either no args (all 5), or one-or-more space-separated group letters as
+# separate argv entries (e.g. `sync-templates.sh A B D`) -- NOT a single quoted string.
+if [ "$#" -eq 0 ]; then
+  TARGET_GROUPS=(A B C D E)
+else
+  TARGET_GROUPS=("$@")
+fi
 
-for GROUP in $TARGET_GROUPS; do
+for GROUP in "${TARGET_GROUPS[@]}"; do
   REPO_NAME="$(group_repo "$GROUP")"
   REPO="AutomationNexus/${REPO_NAME}"
   DIR_NAME="$(group_dir "$GROUP")"
@@ -104,15 +114,24 @@ for GROUP in $TARGET_GROUPS; do
 
   (
     cd "$CLONE_DIR"
-    if [ -z "$(git status --porcelain)" ]; then
+    # NOTE: check the *staged* diff (git diff --cached), not `git status --porcelain`
+    # on the working tree. On Windows, core.autocrlf normalizes LF -> CRLF on checkout,
+    # so files with zero real content difference still show as "modified" in working-tree
+    # status -- `git add -A` then stages them, but the resulting blob is identical to
+    # HEAD's, so `git commit` correctly finds nothing to commit and exits non-zero,
+    # which used to kill this whole script under `set -e` after processing only the
+    # first affected group. Checking the index against HEAD avoids the false positive.
+    git add -A
+    if git diff --cached --quiet; then
       echo "    already in sync"
     else
-      git add -A
       git commit -q -m "chore: resync from automationnexus/.github templates/_shared + ${DIR_NAME}"
       git push -q origin main
       echo "    pushed sync commit"
     fi
+    exit 0
   )
 done
 
 echo "==> Done."
+exit 0
