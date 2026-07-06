@@ -46,15 +46,15 @@ Removed: `opencode.json`, `opencode.json.example`, `.opencode/`, `tooling/openco
 
 | Repo | Status | Notes |
 |------|--------|-------|
-| `.github` (this repo) | ✅ baseline done | Org `CLAUDE.md`, this doc, `templates/_shared/CLAUDE.md.template`, gitignore/dev-only-paths cleanup |
-| `CognitiveSystems` | ✅ done | Pilot. 5 agents + 1 new (`security-auditor`), 5 commands, `.claude/settings.json`, full retire |
-| `ModelDeck` | ✅ done | Dual-domain (Python service + HA add-on): 6 agents (`mqtt-engineer`, `addon-engineer`, `qa-gatekeeper`, `addon-qa-gatekeeper`, `reviewer`, `security-auditor`), 8 commands |
-| `MediaRefinery` | ✅ done | 6 agents, 5 commands. **Found and fixed a real bug**: an unanchored `agents/` rule in `.gitignore` was silently swallowing `.claude/agents/` — anchored to `/agents/` |
-| `Uploadarr` | ✅ done | 6 agents, 5 commands. Pre-existing stray `$null` file in repo root left untouched (unrelated to this migration) |
-| `HomeAssistant` | ✅ done | Most complex: 8 agents (incl. `drift-sync`, `live-inspector` on haiku), 8 commands, full permission denylist. **Found and fixed a real CI-breaking bug**: `tools/check_repo_hygiene.py` hard-failed if `CLAUDE.md`/`.claude/` were tracked at all (no branch-awareness) — removed them from its forbidden lists since they're now intentionally committed on `dev`. This repo's `.gitignore`/`dev-only-paths` also never had `CLAUDE.md`/`.claude/` entries at all (gap vs. other repos) — added to `dev-only-paths` only (not `.gitignore`, since they must be committable on `dev`) |
-| `ARCRunner` | ✅ done | **Main-only exception applied**: no `dev` branch exists, so `CLAUDE.md`/`.claude/` are committed directly on `main` (documented in the file itself). Minimal surface (1 Dockerfile, 1 workflow, no secrets) — only `qa-gatekeeper` (haiku); no architect/reviewer/security-auditor, to avoid over-engineering |
-| `template-python-docker` / `-pypi` / `-docker-ha-addon` / `-infra-main-only` / `-ha-config` | pending | Regenerated from `templates/_shared/` + group bundles via `scripts/sync-templates.sh` — **not run yet** (pushes to remote `AutomationNexus/template-*` repos; requires explicit approval to execute) |
-| `better-ccflare` | pending archival | Not migrated by design. Fork of `snipeship/ccflare`, a Claude API load-balancer proxy — out of scope for this org's dev-tooling migration. Archival steps (README notice, `gh repo archive`, machine cleanup) not yet executed — see below. |
+| `.github` (this repo) | ✅ merged pending review | [PR #12](https://github.com/AutomationNexus/.github/pull/12). Org `CLAUDE.md`, this doc, per-group `CLAUDE.md`/`.claude/` for all 5 templates, gitignore/dev-only-paths cleanup |
+| `CognitiveSystems` | ✅ [PR #27](https://github.com/AutomationNexus/CognitiveSystems/pull/27) (CI running) | Pilot. 5 agents + 1 new (`security-auditor`), 5 commands, `.claude/settings.json`, full retire |
+| `ModelDeck` | ✅ merged | [PR #81](https://github.com/AutomationNexus/ModelDeck/pull/81). Dual-domain (Python service + HA add-on): 6 agents, 8 commands |
+| `MediaRefinery` | ✅ merged | [PR #23](https://github.com/AutomationNexus/MediaRefinery/pull/23). 6 agents, 5 commands. **Found and fixed a real bug**: an unanchored `agents/` rule in `.gitignore` was silently swallowing `.claude/agents/` — anchored to `/agents/` |
+| `Uploadarr` | ✅ merged | [PR #36](https://github.com/AutomationNexus/Uploadarr/pull/36). 6 agents, 5 commands |
+| `HomeAssistant` | ✅ merged | [PR #43](https://github.com/AutomationNexus/HomeAssistant/pull/43). Most complex: 8 agents, 8 commands, full permission denylist. **Found and fixed a real CI-breaking bug**: `tools/check_repo_hygiene.py` hard-failed if `CLAUDE.md`/`.claude/` were tracked at all — fixed and verified |
+| `ARCRunner` | ✅ [PR #10](https://github.com/AutomationNexus/ARCRunner/pull/10) (CI running) | **Main-only exception applied**: `CLAUDE.md`/`.claude/` committed directly on `main`. Minimal surface — only `qa-gatekeeper` (haiku) |
+| `template-python-docker` / `-pypi` / `-docker-ha-addon` / `-infra-main-only` / `-ha-config` | ✅ done | Regenerated via `scripts/sync-templates.sh` (run with Git Bash — WSL's `bash` on PATH doesn't have `gh`) and pushed directly to `main` on all 5 `AutomationNexus/template-*` repos. Stale `tooling/opencode/`, `opencode.json.example`, `tools/bootstrap-opencode.*` (not deleted by the sync script, a documented limitation) manually removed from all 5 via a separate clone+push. Verified: `git ls-tree` on each repo's `main` shows zero `opencode` paths and a present `CLAUDE.md`. |
+| `better-ccflare` | ⚠️ blocked | Not migrated by design (out of scope). **Archival could not be completed**: the repo `tombii/better-ccflare` is owned by a different GitHub account than the one authenticated for this migration (`t-abraham`, read-only access — `pull: true, push: false, admin: false`). Archiving or editing the README requires the repo owner's own action. |
 
 ## better-ccflare — archival notes
 
@@ -69,6 +69,25 @@ load-balancer), not an internal dev tool, so it is **archived rather than migrat
    `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` at a better-ccflare instance, and stop/remove
    any running instance (systemd unit, Docker container). Claude Code should talk to
    Anthropic directly with your own account — no proxy in the standard workflow.
+
+**Status: steps 1–3 not executed** — the authenticated `gh` account for this migration
+(`t-abraham`) has only read access to `tombii/better-ccflare` (not admin/push), so it
+cannot archive the repo or push a README change. This needs to be done by whoever has
+admin rights on that repo (log in as `tombii`, or ask them to run the archive step).
+Step 4 was checked on this machine: no `better-ccflare` process, listening port
+(8080/8081/8082/8889), Windows service, or `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`
+env var was found — nothing to decommission locally.
+
+## OpenCode uninstall — explicitly deferred
+
+The operator asked to **not** uninstall OpenCode itself (npm package `opencode-ai`,
+the OpenCode Desktop app, and `~/.config/opencode/` / `~/.local/share/opencode/`
+including its `opencode-claude-auth` plugin config and `auth.json`) during this pass.
+All of it remains installed and untouched on this machine. If it's uninstalled later,
+note that `~/.local/share/opencode/auth.json` holds OAuth session data for the
+`opencode-claude-auth` plugin — deleting the local file doesn't revoke server-side
+authorization, so also revoke that grant from the Anthropic account security page if
+full deprovisioning is ever wanted.
 
 ## Lessons learned during rollout (check these in every remaining repo)
 
