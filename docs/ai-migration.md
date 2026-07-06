@@ -47,14 +47,14 @@ Removed: `opencode.json`, `opencode.json.example`, `.opencode/`, `tooling/openco
 | Repo | Status | Notes |
 |------|--------|-------|
 | `.github` (this repo) | ✅ baseline done | Org `CLAUDE.md`, this doc, `templates/_shared/CLAUDE.md.template`, gitignore/dev-only-paths cleanup |
-| `CognitiveSystems` | ✅ pilot done | First full convert-and-retire; validated against the checklist below |
-| `ModelDeck` | pending | Apply proven CognitiveSystems mapping |
-| `MediaRefinery` | pending | Apply proven CognitiveSystems mapping |
-| `Uploadarr` | pending | Apply proven CognitiveSystems mapping |
-| `HomeAssistant` | pending | Apply proven CognitiveSystems mapping; note `ha-live-inspector` → haiku |
-| `ARCRunner` | pending | **Main-only repo** — no `dev` branch exists, so decision 1's dev-only mechanism doesn't apply cleanly. Needs an explicit call: commit `CLAUDE.md`/`.claude/` on `main` as an exception, or keep them local-only (gitignored) for this repo only. Flag for user decision in that repo's PR. |
-| `template-python-docker` / `-pypi` / `-docker-ha-addon` / `-infra-main-only` / `-ha-config` | pending | Regenerated from `templates/_shared/` + group bundles via `scripts/sync-templates.sh` after this repo's templates are updated |
-| `better-ccflare` | archived | Not migrated. Fork of `snipeship/ccflare`, a Claude API load-balancer proxy — out of scope for this org's dev-tooling migration. See below. |
+| `CognitiveSystems` | ✅ done | Pilot. 5 agents + 1 new (`security-auditor`), 5 commands, `.claude/settings.json`, full retire |
+| `ModelDeck` | ✅ done | Dual-domain (Python service + HA add-on): 6 agents (`mqtt-engineer`, `addon-engineer`, `qa-gatekeeper`, `addon-qa-gatekeeper`, `reviewer`, `security-auditor`), 8 commands |
+| `MediaRefinery` | ✅ done | 6 agents, 5 commands. **Found and fixed a real bug**: an unanchored `agents/` rule in `.gitignore` was silently swallowing `.claude/agents/` — anchored to `/agents/` |
+| `Uploadarr` | ✅ done | 6 agents, 5 commands. Pre-existing stray `$null` file in repo root left untouched (unrelated to this migration) |
+| `HomeAssistant` | ✅ done | Most complex: 8 agents (incl. `drift-sync`, `live-inspector` on haiku), 8 commands, full permission denylist. **Found and fixed a real CI-breaking bug**: `tools/check_repo_hygiene.py` hard-failed if `CLAUDE.md`/`.claude/` were tracked at all (no branch-awareness) — removed them from its forbidden lists since they're now intentionally committed on `dev`. This repo's `.gitignore`/`dev-only-paths` also never had `CLAUDE.md`/`.claude/` entries at all (gap vs. other repos) — added to `dev-only-paths` only (not `.gitignore`, since they must be committable on `dev`) |
+| `ARCRunner` | ✅ done | **Main-only exception applied**: no `dev` branch exists, so `CLAUDE.md`/`.claude/` are committed directly on `main` (documented in the file itself). Minimal surface (1 Dockerfile, 1 workflow, no secrets) — only `qa-gatekeeper` (haiku); no architect/reviewer/security-auditor, to avoid over-engineering |
+| `template-python-docker` / `-pypi` / `-docker-ha-addon` / `-infra-main-only` / `-ha-config` | pending | Regenerated from `templates/_shared/` + group bundles via `scripts/sync-templates.sh` — **not run yet** (pushes to remote `AutomationNexus/template-*` repos; requires explicit approval to execute) |
+| `better-ccflare` | pending archival | Not migrated by design. Fork of `snipeship/ccflare`, a Claude API load-balancer proxy — out of scope for this org's dev-tooling migration. Archival steps (README notice, `gh repo archive`, machine cleanup) not yet executed — see below. |
 
 ## better-ccflare — archival notes
 
@@ -69,6 +69,26 @@ load-balancer), not an internal dev tool, so it is **archived rather than migrat
    `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` at a better-ccflare instance, and stop/remove
    any running instance (systemd unit, Docker container). Claude Code should talk to
    Anthropic directly with your own account — no proxy in the standard workflow.
+
+## Lessons learned during rollout (check these in every remaining repo)
+
+1. **Gitignore collisions**: some repos have unrelated bare patterns like `agents/`
+   (meant for a top-level local-only planning folder) that unintentionally also match
+   `.claude/agents/` and silently gitignore every subagent file. Always run
+   `git check-ignore -v .claude/agents/<any-file>` after adding agents, before committing.
+2. **Bespoke hygiene/secret scripts**: at least one repo (`HomeAssistant`) had a custom
+   `tools/check_repo_hygiene.py` that hard-failed CI if `CLAUDE.md`/`.claude/` were tracked
+   at all, with no branch-awareness. Grep any repo-specific QA/hygiene script for
+   `CLAUDE.md`, `.claude`, `AGENTS.md` before assuming the standard dev-only convention
+   will pass CI — update the script's forbidden-list if needed and verify by actually
+   running the script locally with the new files staged.
+3. **`.env.*` wildcard vs. `.env.example`**: Claude Code's `permissions.deny` takes
+   precedence over `allow`, so a broad `Read(**/.env.*)` deny will also block the intended
+   `.env.example`. Check whether the repo actually has other real `.env.*` variants; if not,
+   deny only the exact `.env` file instead of the wildcard.
+4. **`git add -A` can stage unrelated pre-existing cruft** (e.g. a stray `$null` file) —
+   review `git status --short` before committing and unstage anything not part of the
+   migration.
 
 ## Validation checklist (per repo, before marking rollout done)
 
