@@ -53,7 +53,7 @@ main push → release-{docker|pypi}.yml → tag (from pyproject) → publish →
 
 ## AI tooling
 
-The org uses **Claude Code** (migrated off OpenCode). Convention: `CLAUDE.md` and
+The org uses **Claude Code**. Convention: `CLAUDE.md` and
 `.claude/agents|commands|settings.json` are **committed on `dev`**, stripped from `main`
 by `.github/dev-only-paths`; only `CLAUDE.local.md` and `.claude/settings.local.json` are
 gitignored (personal, never shared). No model/provider/router config lives in any repo —

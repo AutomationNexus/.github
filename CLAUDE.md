@@ -43,7 +43,7 @@ from the operator's local env at bootstrap time.
 
 ## AI tooling convention (org-wide)
 
-This org migrated from OpenCode to Claude Code. The standard per-repo layout:
+This org standardizes on Claude Code. The standard per-repo layout:
 
 - `CLAUDE.md` at repo root — project-specific instructions.
 - `.claude/agents/*.md` — repo-specific subagents.
@@ -67,6 +67,3 @@ new repos start from — keep them in sync with whatever pattern proves out duri
   is used directly against Anthropic; there is no proxy/router in the standard workflow.
 - Do not commit real values for `CI_BOT_APP_PRIVATE_KEY`, `PYPI_API_TOKEN`, or any
   `.env`-style secret in any template or script.
-- Do not reintroduce OpenCode-specific files (`opencode.json`, `.opencode/`,
-  `tooling/opencode/`, `tools/bootstrap-opencode.*`) into new templates — that tooling
-  is retired org-wide.
