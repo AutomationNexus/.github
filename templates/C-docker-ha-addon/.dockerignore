@@ -12,5 +12,4 @@ tests/
 docs/
 tooling/
 tools/
-.opencode
-opencode.json
+.claude
