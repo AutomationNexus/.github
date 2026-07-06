@@ -1,6 +1,9 @@
 # Plan: migrate AI instruction files to the standard (committed) convention
 
-> Status: PROPOSAL — no repo changes made yet. Review, then approve per-repo rollout.
+> **Status: SUPERSEDED.** Decisions were finalized and rollout is in progress — see
+> [`docs/ai-migration.md`](ai-migration.md) for the current, authoritative plan and
+> per-repo status. This document is kept for historical context only; do not follow it
+> for new work.
 
 ## Why
 

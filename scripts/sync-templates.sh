@@ -87,9 +87,11 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   copy_file "${SHARED}/gitignore" "${CLONE_DIR}/.gitignore"
   copy_dir  "${SHARED}/githooks" "${CLONE_DIR}/.githooks"
   copy_dir  "${SHARED}/tools" "${CLONE_DIR}/tools"
-  copy_dir  "${SHARED}/tooling/opencode" "${CLONE_DIR}/tooling/opencode"
-  copy_file "${SHARED}/opencode.json.example" "${CLONE_DIR}/opencode.json.example"
   copy_file "${SHARED}/dev-only-paths" "${CLONE_DIR}/.github/dev-only-paths"
+  # Claude Code seed. CLAUDE.md.template is NOT copied as a live CLAUDE.md -- each
+  # group needs a hand-customized one (see automationnexus/.github's docs/ai-migration.md,
+  # "template-* repos: pending"). The settings.json baseline is generic enough to use as-is.
+  copy_file "${SHARED}/.claude/settings.json.template" "${CLONE_DIR}/.claude/settings.json"
 
   # ---- 2. group-specific overlay (canonical starter bundle, wins on conflicts) ----
   copy_dir  "${SRC}/.github" "${CLONE_DIR}/.github"

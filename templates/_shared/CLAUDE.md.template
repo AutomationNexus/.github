@@ -1,0 +1,53 @@
+# CLAUDE.md — <REPO_NAME>
+
+<!-- Replace every <PLACEHOLDER> below. Delete sections that don't apply.
+     This file is committed on `dev` and stripped from `main` by
+     `.github/dev-only-paths` (org convention -- see automationnexus/.github's
+     docs/ai-migration.md). Keep it short: specifics, not general AI advice. -->
+
+<ONE_PARAGRAPH_WHAT_THIS_REPO_IS_AND_ITS_BUILD_SYSTEM>
+
+## Branch policy
+
+- Branches: `dev` (default) → `main`, via `Promote dev to main` (CI-gated, no manual pushes).
+  <!-- If this is a main-only repo (group D), replace with: "This repo is main-only;
+       no dev branch. Feature branch -> PR -> CI -> merge to main." -->
+- Never push directly to `dev` or `main`. Feature branch prefix: `<PREFIX>-` (e.g. `<PREFIX>-fix-thing`).
+- Enable the local pre-push guard once per clone: `tools\install-githooks.cmd`.
+- Start every task with `git status --short --branch`.
+
+## Editable paths
+
+<LIST_THE_MAIN_SOURCE_DIRS_AND_WHAT_THEY_ARE>
+
+## QA gates (run before every PR)
+
+```
+<LINT_COMMAND>
+<TEST_COMMAND>
+git diff --check
+```
+
+Never push directly to `dev`/`main`. Promote `dev` → `main` only via the
+`Promote dev to main` GitHub Actions workflow.
+
+## Shared CI — do not inline
+
+- Never fork or copy-paste `automationnexus/.github` reusable-workflow logic into this
+  repo's own workflow files. Always call it via
+  `uses: automationnexus/.github/.github/workflows/<name>.yml@v1`.
+- If you need new CI behavior, add a generic input to the shared workflow (contribute it
+  to `automationnexus/.github`) — never a local fork.
+- Never use `GITHUB_TOKEN` or a personal token for cross-repo/cross-branch automation —
+  only the CI-Bot GitHub App.
+
+## Secrets / never read or print
+
+- `.env`, `secrets.yaml` (if present), private keys — never read, print, or commit.
+- `.claude/settings.json` in this repo already denies these paths; do not weaken it.
+
+## Do not
+
+- Do not add model/provider/router config anywhere in this repo. Claude Code talks
+  directly to Anthropic with the operator's own account.
+- Do not reintroduce `opencode.json`, `.opencode/`, or `tooling/opencode/` — retired org-wide.

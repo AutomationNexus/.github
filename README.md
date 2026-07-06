@@ -53,10 +53,11 @@ main push → release-{docker|pypi}.yml → tag (from pyproject) → publish →
 
 ## AI tooling
 
-Current setup: local-only (gitignored): `opencode.json`, `.opencode/`, `CLAUDE.md`, `AGENTS.md`,
-`.cursor/`, `.claude/`; shared/committed: `tooling/opencode/**`, `opencode.json.example`,
-`tools/bootstrap-opencode.*`; `.github/dev-only-paths` keeps the local-only files off `main`.
+The org uses **Claude Code** (migrated off OpenCode). Convention: `CLAUDE.md` and
+`.claude/agents|commands|settings.json` are **committed on `dev`**, stripped from `main`
+by `.github/dev-only-paths`; only `CLAUDE.local.md` and `.claude/settings.local.json` are
+gitignored (personal, never shared). No model/provider/router config lives in any repo —
+Claude Code talks directly to Anthropic with the operator's own account.
 
-> Note: this differs from Anthropic's recommended convention (commit `CLAUDE.md`/`.claude/rules/`,
-> gitignore only `CLAUDE.local.md`). See [`docs/ai-files-migration-plan.md`](docs/ai-files-migration-plan.md)
-> for a proposed migration to the standard pattern.
+See [`docs/ai-migration.md`](docs/ai-migration.md) for the full decision record, model-tier
+mapping, and per-repo rollout status.
