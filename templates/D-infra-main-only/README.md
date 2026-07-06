@@ -57,7 +57,8 @@ Rename `.github/workflows/build-image.yml.example` → `build-image.yml` and set
   until you add code and set those inputs. Nothing to fix before your first PR.
 - [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
   `main` are blocked locally as well as by CI guards, once you run `tools\install-githooks.cmd`.
-- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
-  (or `.ps1`) to get a working local OpenCode setup.
+- [x] `CLAUDE.md` + `.claude/agents/qa-gatekeeper.md` + `.claude/settings.json` — open the
+  repo in Claude Code, no bootstrap step needed. Main-only, so `CLAUDE.md`/`.claude/` are
+  committed directly on `main` (documented exception, see `CLAUDE.md`).
 - [ ] Rename `build-image.yml.example` → `build-image.yml` and set `IMAGE` (step 3 above) once
   you're ready to build/push an image.

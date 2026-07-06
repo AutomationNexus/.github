@@ -26,10 +26,16 @@ rulesets (`protect-dev`/`protect-main`) with the CI-Bot App as bypass actor — 
 ## Self-hosted (ARC) repos
 Use `runner-labels: '["linux","x64","k3s","ubuntu-latest"]'` in every wrapper.
 
-## AI tooling (local-only vs shared)
-- Local-only (gitignored, never committed): `opencode.json`, `.opencode/`, `CLAUDE.md`, `AGENTS.md`.
-- Shared templates (committed): `tooling/opencode/**`, `opencode.json.example`, `tools/bootstrap-opencode.*`.
-- `.github/dev-only-paths` blocks the local-only files from ever reaching `main`.
+## AI tooling (Claude Code)
+- Each group ships a real, ready-to-use `CLAUDE.md` + `.claude/agents/qa-gatekeeper.md` +
+  `.claude/settings.json` (from `_shared/.claude/settings.json.template`) — no bootstrap
+  step needed, just open the repo in Claude Code.
+- Convention: `CLAUDE.md`/`.claude/` are committed on `dev`, stripped from `main` by
+  `.github/dev-only-paths` (group D / main-only repos are a documented exception — see
+  that group's `CLAUDE.md`). Only `CLAUDE.local.md` and `.claude/settings.local.json` are
+  gitignored (personal, never shared).
+- No model/provider/router config in any template — Claude Code talks directly to
+  Anthropic with the operator's own account.
 
 ## Keeping the 5 template repos in sync -- mandatory after any change here
 

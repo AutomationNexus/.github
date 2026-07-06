@@ -88,14 +88,16 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   copy_dir  "${SHARED}/githooks" "${CLONE_DIR}/.githooks"
   copy_dir  "${SHARED}/tools" "${CLONE_DIR}/tools"
   copy_file "${SHARED}/dev-only-paths" "${CLONE_DIR}/.github/dev-only-paths"
-  # Claude Code seed. CLAUDE.md.template is NOT copied as a live CLAUDE.md -- each
-  # group needs a hand-customized one (see automationnexus/.github's docs/ai-migration.md,
-  # "template-* repos: pending"). The settings.json baseline is generic enough to use as-is.
+  # Claude Code seed: generic settings.json baseline for every group. Each group's own
+  # real CLAUDE.md + .claude/agents/commands are copied below in the group overlay step
+  # (CLAUDE.md.template in _shared/ is reference-only, not copied as a live file).
   copy_file "${SHARED}/.claude/settings.json.template" "${CLONE_DIR}/.claude/settings.json"
 
   # ---- 2. group-specific overlay (canonical starter bundle, wins on conflicts) ----
   copy_dir  "${SRC}/.github" "${CLONE_DIR}/.github"
   copy_file "${SRC}/README.md" "${CLONE_DIR}/README.md"
+  copy_file "${SRC}/CLAUDE.md" "${CLONE_DIR}/CLAUDE.md"
+  copy_dir  "${SRC}/.claude" "${CLONE_DIR}/.claude"
   copy_dir  "${SRC}/tools" "${CLONE_DIR}/tools"
   copy_file "${SRC}/pyproject.toml" "${CLONE_DIR}/pyproject.toml"
   copy_file "${SRC}/Dockerfile" "${CLONE_DIR}/Dockerfile"

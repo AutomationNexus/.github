@@ -74,8 +74,8 @@ This template ships a working, green-CI Python project as-is, before you replace
 - [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
   `dev`/`main` are blocked locally as well as by CI guards, once you run
   `tools\install-githooks.cmd`.
-- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
-  (or `.ps1`) to get a working local OpenCode setup.
+- [x] `CLAUDE.md` + `.claude/agents/qa-gatekeeper.md` + `.claude/settings.json` — open the
+  repo in Claude Code, no bootstrap step needed.
 - [x] `mkdocs.yml` + `docs/README.md` + `.github/workflows/docs.yml` — MkDocs Material site,
   deploys on push to `main` if GitHub Pages is enabled. Delete all three if you don't want docs.
 - [ ] Rename `src/REPLACE_ME/` and the `REPLACE_ME` placeholders (see step 3 above) once you

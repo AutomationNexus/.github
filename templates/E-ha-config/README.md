@@ -70,6 +70,6 @@ unmodified:
 - [x] `.gitignore`, `.githooks/pre-push`, `tools/install-githooks.cmd` — direct pushes to
   `dev`/`main` are blocked locally as well as by CI guards, once you run
   `tools\install-githooks.cmd`.
-- [x] `opencode.json.example` + `tooling/opencode/` — run `tools\bootstrap-opencode.cmd`
-  (or `.ps1`) to get a working local OpenCode setup.
+- [x] `CLAUDE.md` + `.claude/agents/qa-gatekeeper.md` + `.claude/settings.json` — open the
+  repo in Claude Code, no bootstrap step needed.
 - [ ] Replace the stub config with your real one (step 3 above).
