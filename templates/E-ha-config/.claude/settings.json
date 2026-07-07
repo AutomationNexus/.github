@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(./secrets.yaml)",
+      "Read(**/secrets.yaml)",
+      "Read(**/*.secret.yaml)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git push origin dev:*)",
+      "Bash(git push origin main:*)"
+    ]
+  }
+}
