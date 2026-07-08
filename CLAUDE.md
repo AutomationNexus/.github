@@ -18,7 +18,7 @@ consumer repo and running its CI.
   `uses: automationnexus/.github/.github/workflows/<name>.yml@v1`.
 - If a consumer repo needs new behavior, the fix is a new **generic input** on the
   shared workflow — never a one-off fork in the consumer repo. Precedent: `build-args`,
-  `main-source-allow-glob`, `exclude-paths`.
+  `main-source-allow-glob`, `exclude-paths`, `strip-dev-only-paths`.
 - Tag stable changes `@v1` only after they're proven; `@latest` tracks HEAD.
 
 ## Templates (`templates/<group>/` + `templates/_shared/`)
@@ -53,9 +53,11 @@ This org standardizes on Claude Code. The standard per-repo layout:
 - `CLAUDE.local.md` — personal per-project notes, gitignored, never committed.
 
 **Dev-only convention (this org's choice):** `CLAUDE.md` and `.claude/` are committed
-on `dev` but stripped from `main` by `.github/dev-only-paths` (via the promote-dev-to-main
-workflow), matching how `DEVELOPMENT.md`/`docs/development/` already work. `main` stays a
-lean, AI-instructions-free public artifact. Full rationale and rollout status:
+on `dev` but must be stripped from `main`. The promote-dev-to-main workflow only does this
+when its caller passes `strip-dev-only-paths: true` — every consumer repo's
+`.github/workflows/promote-dev-to-main.yml` must set it (alongside a `.github/dev-only-paths`
+file) or these files will reach `main` and fail `ci.yml`'s Guard Main Files hygiene check.
+`main` stays a lean, AI-instructions-free public artifact. Full rationale and rollout status:
 [`docs/ai-migration.md`](docs/ai-migration.md).
 
 `templates/_shared/CLAUDE.md.template` and `templates/_shared/.claude/` are the seeds

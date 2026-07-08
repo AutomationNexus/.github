@@ -17,6 +17,16 @@ on:
         required: false
         default: ""
         type: string
+      strip-dev-only-paths:
+        description: >-
+          When true, delete files tracked on dev that match .github/dev-only-paths (if that
+          file exists on dev) from the promote branch before opening the PR -- e.g. CLAUDE.md,
+          .claude/, and other dev-only tooling that must never land on main. Unlike
+          exclude-paths (which restores main's existing copy of a path dev also touched),
+          this removes paths main should never have at all, even if main has never had them.
+        required: false
+        default: false
+        type: boolean
     secrets:
       ci-bot-app-id:
         required: true
@@ -81,6 +91,7 @@ jobs:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           REPO: ${{ github.repository }}
           EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+          STRIP_DEV_ONLY_PATHS: ${{ inputs.strip-dev-only-paths }}
         run: |
           set -euo pipefail
           ahead=$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')
@@ -89,39 +100,60 @@ jobs:
             echo "Nothing to promote."; exit 0
           fi
 
-          # exclude-paths' temp branch is a point-in-time snapshot of main. If another
-          # workflow (e.g. a nightly pointer publish) pushes to main between when the
-          # snapshot was taken and when this PR merges, the merge can conflict. Retry the
-          # whole build+PR+merge cycle from a fresh main snapshot a few times before giving
-          # up -- this is a real, observed race, not a hypothetical.
+          NEEDS_TEMP_BRANCH=""
+          if [ -n "${EXCLUDE_PATHS}" ] || [ "${STRIP_DEV_ONLY_PATHS}" = "true" ]; then
+            NEEDS_TEMP_BRANCH=1
+          fi
+
+          # The temp branch is a point-in-time snapshot of main. If another workflow (e.g. a
+          # nightly pointer publish) pushes to main between when the snapshot was taken and
+          # when this PR merges, the merge can conflict. Retry the whole build+PR+merge cycle
+          # from a fresh main snapshot a few times before giving up -- this is a real,
+          # observed race, not a hypothetical.
           for RETRY in 1 2 3; do
             HEAD_BRANCH="dev"
 
-            if [ -n "${EXCLUDE_PATHS}" ]; then
-              echo "exclude-paths set (attempt ${RETRY}/3) - building a promote branch that preserves main's copy of:"
-              echo "${EXCLUDE_PATHS}"
+            if [ -n "${NEEDS_TEMP_BRANCH}" ]; then
+              echo "building a reconciled promote branch (attempt ${RETRY}/3)"
               git checkout dev
               git config user.name "github-actions[bot]"
               git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
               git fetch origin main
               TEMP_BRANCH="sync/publish-main-promote-${{ github.run_id }}-${RETRY}"
               git checkout -b "${TEMP_BRANCH}"
-              while IFS= read -r p; do
-                [ -z "${p}" ] && continue
-                if git cat-file -e "origin/main:${p}" 2>/dev/null; then
-                  git checkout origin/main -- "${p}"
+
+              if [ -n "${EXCLUDE_PATHS}" ]; then
+                echo "exclude-paths set - preserving main's copy of:"
+                echo "${EXCLUDE_PATHS}"
+                while IFS= read -r p; do
+                  [ -z "${p}" ] && continue
+                  if git cat-file -e "origin/main:${p}" 2>/dev/null; then
+                    git checkout origin/main -- "${p}"
+                  else
+                    echo "  ${p}: not on main yet, keeping dev's copy as introduced"
+                  fi
+                done <<< "${EXCLUDE_PATHS}"
+              fi
+
+              if [ "${STRIP_DEV_ONLY_PATHS}" = "true" ] && [ -f .github/dev-only-paths ]; then
+                echo "strip-dev-only-paths set - removing files matching .github/dev-only-paths:"
+                mapfile -t dev_only_files < <(git ls-files | grep -iE -f .github/dev-only-paths || true)
+                if [ "${#dev_only_files[@]}" -gt 0 ]; then
+                  printf '  %s\n' "${dev_only_files[@]}"
+                  git rm -q -- "${dev_only_files[@]}"
                 else
-                  echo "  ${p}: not on main yet, keeping dev's copy as introduced"
+                  echo "  none tracked, nothing to strip"
                 fi
-              done <<< "${EXCLUDE_PATHS}"
+              fi
+
               if git diff --cached --quiet; then
-                echo "No changes needed to excluded paths - dev already matches main there."
+                echo "No changes needed - dev's copy already matches what main should have."
               else
-                git commit -m "chore(promote): preserve main-owned paths"
+                git commit -m "chore(promote): reconcile main-owned/dev-only paths"
               fi
               ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
               if [ "${ahead2}" = "0" ]; then
-                echo "Nothing to promote after excluding main-owned paths."; exit 0
+                echo "Nothing to promote after path reconciliation."; exit 0
               fi
               git push origin "${TEMP_BRANCH}"
               HEAD_BRANCH="${TEMP_BRANCH}"
@@ -169,7 +201,7 @@ jobs:
             mergeable=$(gh pr view "${pr}" --repo "${REPO}" --json mergeable --jq '.mergeable')
             if [ "${mergeable}" = "CONFLICTING" ]; then
               echo "::warning::Promotion PR #${pr} has merge conflicts (main moved during the snapshot window)."
-              if [ -n "${EXCLUDE_PATHS}" ] && [ "${RETRY}" -lt 3 ]; then
+              if [ -n "${NEEDS_TEMP_BRANCH}" ] && [ "${RETRY}" -lt 3 ]; then
                 echo "Closing #${pr} and retrying from a fresh main snapshot..."
                 gh pr close "${pr}" --repo "${REPO}" --delete-branch
                 sleep 5
@@ -192,7 +224,7 @@ jobs:
               echo "Merged promotion PR #${pr}."
               break
             fi
-            if echo "${merge_out}" | grep -qi "conflict" && [ -n "${EXCLUDE_PATHS}" ] && [ "${RETRY}" -lt 3 ]; then
+            if echo "${merge_out}" | grep -qi "conflict" && [ -n "${NEEDS_TEMP_BRANCH}" ] && [ "${RETRY}" -lt 3 ]; then
               echo "::warning::Merge failed on a conflict; retrying from a fresh main snapshot..."
               gh pr close "${pr}" --repo "${REPO}" --delete-branch || true
               sleep 5
