@@ -57,10 +57,16 @@ jobs:
             // same push event that also triggers ci.yml on dev -- they can race, with
             // ci.yml's run not registered yet when this check first runs. Poll instead of
             // checking once.
+            //
+            // event: "push" matters here: a PR whose head branch happens to be literally
+            // named "dev" (e.g. a stale/duplicate promote PR) also shows up as a workflow
+            // run "on branch dev", and a pull_request-triggered run can be newer than the
+            // real push-triggered dev CI run -- without this filter that stale/unrelated
+            // run outranks the actual dev CI result and can wrongly fail this gate.
             let run;
             for (let attempt = 1; attempt <= 20; attempt++) {
               const { data } = await github.rest.actions.listWorkflowRuns({
-                owner, repo, workflow_id: ci.id, branch: "dev", per_page: 1,
+                owner, repo, workflow_id: ci.id, branch: "dev", event: "push", per_page: 1,
               });
               run = data.workflow_runs[0];
               if (run && run.status === "completed") break;
