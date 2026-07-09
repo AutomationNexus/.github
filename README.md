@@ -7,7 +7,7 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 | Workflow | Purpose | Key inputs / secrets |
 |----------|---------|----------------------|
 | `ci.yml` | Unified CI: guards + hygiene + lint + test + optional frontend/e2e/integration/security/ha/addon | `branch-model`, `auto-revert`, `runner-labels`, `has-*`, `lint-paths`, `security-paths`, `pip-install-cmd`, `test-cmd`, `pre/post-test-cmd`, e2e-* · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
-| `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
+| `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | `main-only` (bool, default `false`; repo has no `dev` branch, so `feature→main` PRs are squash-merged the same way `feature→dev` PRs are) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 | `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (paths main owns exclusively; promoted via a throwaway branch instead of dev directly), `strip-dev-only-paths` (bool; deletes files matching `.github/dev-only-paths` from the promote branch, e.g. `CLAUDE.md`/`.claude/`), `bump-type` (`patch`/`minor`/`major`/`none`, default `patch`; bumps `pyproject.toml`'s version off the latest `vX.Y.Z` tag reachable on main, folded into the promote branch) · CI-Bot secrets |
 | `nightly.yml` | Nightly Docker build from dev | `image-name`, `platforms`, `force_run`, `has-frontend`, `coverage-threshold`, `pip-install-cmd`, `test-cmd` |
 | `release-docker.yml` | Tag (from pyproject) → build/push GHCR → Release → Trivy | `image-name`, `platforms`, `tag_name`, `has-frontend`, `has-validation` |
