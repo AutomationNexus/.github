@@ -5,11 +5,18 @@ name: Auto-merge
 # WILL trigger downstream workflows (nightly on dev push, release on main push).
 #
 # Qualifying PRs:
-#   feature → dev : squash merge
-#   dev → main    : merge commit (preserves history for releases)
+#   feature → dev             : squash merge
+#   dev → main                : merge commit (preserves history for releases)
+#   feature → main (main-only): squash merge (only when caller passes main-only: true)
 
 on:
   workflow_call:
+    inputs:
+      main-only:
+        description: Repo has no dev branch; treat feature->main like feature->dev (squash merge)
+        type: boolean
+        required: false
+        default: false
     secrets:
       ci-bot-app-id:
         required: true
@@ -31,7 +38,10 @@ jobs:
          github.event.pull_request.head.ref != 'dev' &&
          github.event.pull_request.head.ref != 'main') ||
         (github.event.pull_request.base.ref == 'main' &&
-         github.event.pull_request.head.ref == 'dev')
+         github.event.pull_request.head.ref == 'dev') ||
+        (inputs.main-only == true &&
+         github.event.pull_request.base.ref == 'main' &&
+         github.event.pull_request.head.ref != 'main')
       )
     steps:
       - name: Mint CI-Bot token
@@ -87,12 +97,14 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          MAIN_ONLY: ${{ inputs.main-only }}
         run: |
-          if [ "$BASE" = "main" ]; then
+          if [ "$BASE" = "main" ] && [ "$HEAD" = "dev" ]; then
             # dev → main: keep merge commit so history is linear for releases
             gh pr merge "$PR" --repo "$REPO" --merge
           else
-            # feature → dev: squash for a clean dev history
+            # feature → dev, or feature → main (main-only repo): squash for a clean history
             gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
           fi
-          echo "Merged PR #${PR} (${BASE} target)."
+          echo "Merged PR #${PR} (${BASE} target, main-only=${MAIN_ONLY})."
