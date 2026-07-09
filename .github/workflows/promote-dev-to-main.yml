@@ -27,6 +27,17 @@ on:
         required: false
         default: false
         type: boolean
+      bump-type:
+        description: >-
+          Version bump to apply to pyproject.toml's [project].version before merging, based on
+          the latest vX.Y.Z tag reachable on main: 'patch' (default) increments Z, wrapping
+          1-99 into a Y bump when it would exceed 99; 'minor' increments Y and resets Z to 1;
+          'major' increments X and resets Y and Z to 1; 'none' skips version bumping entirely
+          (e.g. for an add-on-only auto-promote that must not touch the app version). Requires
+          a pyproject.toml on the branch -- silently skipped if none exists.
+        required: false
+        default: 'patch'
+        type: string
     secrets:
       ci-bot-app-id:
         required: true
@@ -98,6 +109,7 @@ jobs:
           REPO: ${{ github.repository }}
           EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
           STRIP_DEV_ONLY_PATHS: ${{ inputs.strip-dev-only-paths }}
+          BUMP_TYPE: ${{ inputs.bump-type }}
         run: |
           set -euo pipefail
           ahead=$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')
@@ -107,8 +119,15 @@ jobs:
           fi
 
           NEEDS_TEMP_BRANCH=""
-          if [ -n "${EXCLUDE_PATHS}" ] || [ "${STRIP_DEV_ONLY_PATHS}" = "true" ]; then
+          if [ -n "${EXCLUDE_PATHS}" ] || [ "${STRIP_DEV_ONLY_PATHS}" = "true" ] || [ "${BUMP_TYPE}" != "none" ]; then
             NEEDS_TEMP_BRANCH=1
+          fi
+
+          PR_TITLE="release: promote dev to main"
+          if [ "${BUMP_TYPE}" = "minor" ]; then
+            PR_TITLE="${PR_TITLE} (Minor)"
+          elif [ "${BUMP_TYPE}" = "major" ]; then
+            PR_TITLE="${PR_TITLE} (Major)"
           fi
 
           # The temp branch is a point-in-time snapshot of main. If another workflow (e.g. a
@@ -152,10 +171,82 @@ jobs:
                 fi
               fi
 
+              NEW_VERSION=""
+              if [ "${BUMP_TYPE}" != "none" ] && [ -f pyproject.toml ]; then
+                echo "bump-type=${BUMP_TYPE} - computing new version from the latest vX.Y.Z tag reachable on main"
+                NEW_VERSION=$(python3 - "${BUMP_TYPE}" <<'PYEOF'
+import re, subprocess, sys
+
+bump_type = sys.argv[1]
+
+tags = subprocess.run(
+    ["git", "tag", "--list", "v*.*.*", "--merged", "origin/main"],
+    capture_output=True, text=True, check=True,
+).stdout.splitlines()
+
+versions = [
+    tuple(int(g) for g in m.groups())
+    for m in (re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t.strip()) for t in tags)
+    if m
+]
+
+if versions:
+    x, y, z = max(versions)
+else:
+    # No release tag yet - fall back to main's current pyproject.toml version,
+    # then 0.0.0 for a first-ever release.
+    x, y, z = 0, 0, 0
+    content = subprocess.run(
+        ["git", "show", "origin/main:pyproject.toml"],
+        capture_output=True, text=True,
+    ).stdout
+    m = re.search(r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
+    if m:
+        x, y, z = (int(g) for g in m.groups())
+
+if bump_type == "major":
+    x, y, z = x + 1, 1, 1
+elif bump_type == "minor":
+    x, y, z = x, y + 1, 1
+else:
+    z += 1
+    if z > 99:
+        y += 1
+        z = 1
+
+new_version = f"{x}.{y}.{z}"
+
+with open("pyproject.toml") as f:
+    content = f.read()
+
+new_content, n = re.subn(
+    r'(?m)^(version\s*=\s*)"\d+\.\d+\.\d+"',
+    lambda mm: f'{mm.group(1)}"{new_version}"',
+    content,
+    count=1,
+)
+if n == 0:
+    print('::error::pyproject.toml has no version = "X.Y.Z" line to bump', file=sys.stderr)
+    sys.exit(1)
+
+with open("pyproject.toml", "w") as f:
+    f.write(new_content)
+
+print(new_version)
+PYEOF
+                )
+                echo "Bumping version to ${NEW_VERSION}"
+                git add pyproject.toml
+              fi
+
               if git diff --cached --quiet; then
                 echo "No changes needed - dev's copy already matches what main should have."
               else
-                git commit -m "chore(promote): reconcile main-owned/dev-only paths"
+                if [ -n "${NEW_VERSION}" ]; then
+                  git commit -m "chore(promote): reconcile promote branch, bump version to ${NEW_VERSION}"
+                else
+                  git commit -m "chore(promote): reconcile main-owned/dev-only paths"
+                fi
               fi
               ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
               if [ "${ahead2}" = "0" ]; then
@@ -169,7 +260,7 @@ jobs:
                  --json number --jq '.[0].number // empty')
             if [ -z "${pr}" ]; then
               gh pr create --repo "${REPO}" --base main --head "${HEAD_BRANCH}" \
-                --title "release: promote dev to main" \
+                --title "${PR_TITLE}" \
                 --body "Automated promotion after dev CI passed. Merges when CI on this PR is green."
               pr=$(gh pr list --repo "${REPO}" --base main --head "${HEAD_BRANCH}" --state open \
                    --json number --jq '.[0].number // empty')

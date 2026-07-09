@@ -7,7 +7,9 @@ workflows (this repo only holds thin wrappers in `.github/workflows/`).
 ## Conventions
 
 - Package: `src/REPLACE_ME/`. Tests: `tests/`.
-- Version is read from `pyproject.toml` — bump it before promoting to release.
+- Version in `pyproject.toml` is bumped automatically by the promote workflow (`bump-type`
+  input on its `workflow_dispatch`: `patch`/`minor`/`major`, default `patch`) — never
+  hand-edit it.
 - Keep changes minimal; run the QA gate before every PR.
 
 ## Branch policy

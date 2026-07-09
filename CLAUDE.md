@@ -18,7 +18,7 @@ consumer repo and running its CI.
   `uses: automationnexus/.github/.github/workflows/<name>.yml@v1`.
 - If a consumer repo needs new behavior, the fix is a new **generic input** on the
   shared workflow — never a one-off fork in the consumer repo. Precedent: `build-args`,
-  `main-source-allow-glob`, `exclude-paths`, `strip-dev-only-paths`.
+  `main-source-allow-glob`, `exclude-paths`, `strip-dev-only-paths`, `bump-type`.
 - Tag stable changes `@v1` only after they're proven; `@latest` tracks HEAD.
 
 ## Templates (`templates/<group>/` + `templates/_shared/`)
