@@ -38,7 +38,11 @@ CI_BOT_APP_PRIVATE_KEY_PATH="/c/Users/<you>/Downloads/automationnexus-ci-bot.<da
 bash scripts/bootstrap-repo.sh AutomationNexus/<your-repo> C <private|public>
 ```
 
-What it does: sets the CI-Bot App repo secrets, creates `dev` as default, and
+What it does: sets the CI-Bot App repo secrets, creates the `dev` branch, sets **`main`**
+as the default branch (Group C is the one group where this differs from the other
+main-dev groups — see "Why one repo, not two" above: Home Assistant's add-on-repository
+feature reads whatever branch GitHub reports as default, with no way for a user to pin a
+different one), and
 (public only) applies the rulesets.
 
 ## 3. Replace placeholders

@@ -33,15 +33,27 @@ if [ "$GROUP" = "B" ]; then
   echo "    set PYPI_API_TOKEN"
 fi
 
-# 3) dev branch + default = dev  (skip for group D / main-only)
+# 3) dev branch (skip for group D / main-only). Default branch is dev for every group
+#    EXCEPT C: Home Assistant's add-on-repository feature clones a repo's default branch
+#    with no way for a user to pin a ref, so Group C's in-repo HA add-on folder(s) require
+#    default = main (see templates/C-docker-ha-addon/README.md, "Why one repo, not two").
+#    Setting default = dev on a Group C repo silently ships stale/wrong add-on metadata to
+#    every HA instance that adds the repo (found live on ModelDeck — dev's copy of the
+#    nightly add-on pointer had gone stale because that pointer is only ever written to
+#    main by nightly.yml's roll-nightly-addon job).
 if [ "$GROUP" != "D" ]; then
   main_sha=$(gh api "repos/${REPO}/git/refs/heads/main" --jq '.object.sha')
   if ! gh api "repos/${REPO}/git/refs/heads/dev" >/dev/null 2>&1; then
     gh api -X POST "repos/${REPO}/git/refs" -f ref="refs/heads/dev" -f sha="$main_sha" >/dev/null
     echo "    created dev branch"
   fi
-  gh api -X PATCH "repos/${REPO}" -f default_branch=dev >/dev/null
-  echo "    default branch = dev"
+  if [ "$GROUP" = "C" ]; then
+    gh api -X PATCH "repos/${REPO}" -f default_branch=main >/dev/null
+    echo "    default branch = main (Group C: HA add-on store reads the default branch)"
+  else
+    gh api -X PATCH "repos/${REPO}" -f default_branch=dev >/dev/null
+    echo "    default branch = dev"
+  fi
 fi
 
 # 4) Protection — public repos get rulesets; private rely on guards + auto-revert
