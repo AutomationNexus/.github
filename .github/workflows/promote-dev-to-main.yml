@@ -175,65 +175,65 @@ jobs:
               if [ "${BUMP_TYPE}" != "none" ] && [ -f pyproject.toml ]; then
                 echo "bump-type=${BUMP_TYPE} - computing new version from the latest vX.Y.Z tag reachable on main"
                 NEW_VERSION=$(python3 - "${BUMP_TYPE}" <<'PYEOF'
-import re, subprocess, sys
+          import re, subprocess, sys
 
-bump_type = sys.argv[1]
+          bump_type = sys.argv[1]
 
-tags = subprocess.run(
-    ["git", "tag", "--list", "v*.*.*", "--merged", "origin/main"],
-    capture_output=True, text=True, check=True,
-).stdout.splitlines()
+          tags = subprocess.run(
+              ["git", "tag", "--list", "v*.*.*", "--merged", "origin/main"],
+              capture_output=True, text=True, check=True,
+          ).stdout.splitlines()
 
-versions = [
-    tuple(int(g) for g in m.groups())
-    for m in (re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t.strip()) for t in tags)
-    if m
-]
+          versions = [
+              tuple(int(g) for g in m.groups())
+              for m in (re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t.strip()) for t in tags)
+              if m
+          ]
 
-if versions:
-    x, y, z = max(versions)
-else:
-    # No release tag yet - fall back to main's current pyproject.toml version,
-    # then 0.0.0 for a first-ever release.
-    x, y, z = 0, 0, 0
-    content = subprocess.run(
-        ["git", "show", "origin/main:pyproject.toml"],
-        capture_output=True, text=True,
-    ).stdout
-    m = re.search(r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
-    if m:
-        x, y, z = (int(g) for g in m.groups())
+          if versions:
+              x, y, z = max(versions)
+          else:
+              # No release tag yet - fall back to main's current pyproject.toml version,
+              # then 0.0.0 for a first-ever release.
+              x, y, z = 0, 0, 0
+              content = subprocess.run(
+                  ["git", "show", "origin/main:pyproject.toml"],
+                  capture_output=True, text=True,
+              ).stdout
+              m = re.search(r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
+              if m:
+                  x, y, z = (int(g) for g in m.groups())
 
-if bump_type == "major":
-    x, y, z = x + 1, 1, 1
-elif bump_type == "minor":
-    x, y, z = x, y + 1, 1
-else:
-    z += 1
-    if z > 99:
-        y += 1
-        z = 1
+          if bump_type == "major":
+              x, y, z = x + 1, 1, 1
+          elif bump_type == "minor":
+              x, y, z = x, y + 1, 1
+          else:
+              z += 1
+              if z > 99:
+                  y += 1
+                  z = 1
 
-new_version = f"{x}.{y}.{z}"
+          new_version = f"{x}.{y}.{z}"
 
-with open("pyproject.toml") as f:
-    content = f.read()
+          with open("pyproject.toml") as f:
+              content = f.read()
 
-new_content, n = re.subn(
-    r'(?m)^(version\s*=\s*)"\d+\.\d+\.\d+"',
-    lambda mm: f'{mm.group(1)}"{new_version}"',
-    content,
-    count=1,
-)
-if n == 0:
-    print('::error::pyproject.toml has no version = "X.Y.Z" line to bump', file=sys.stderr)
-    sys.exit(1)
+          new_content, n = re.subn(
+              r'(?m)^(version\s*=\s*)"\d+\.\d+\.\d+"',
+              lambda mm: f'{mm.group(1)}"{new_version}"',
+              content,
+              count=1,
+          )
+          if n == 0:
+              print('::error::pyproject.toml has no version = "X.Y.Z" line to bump', file=sys.stderr)
+              sys.exit(1)
 
-with open("pyproject.toml", "w") as f:
-    f.write(new_content)
+          with open("pyproject.toml", "w") as f:
+              f.write(new_content)
 
-print(new_version)
-PYEOF
+          print(new_version)
+          PYEOF
                 )
                 echo "Bumping version to ${NEW_VERSION}"
                 git add pyproject.toml
