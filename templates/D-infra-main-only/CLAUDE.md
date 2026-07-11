@@ -40,7 +40,11 @@ scope genuinely grows.
 
 ## Slash commands
 
-`/qa` (QA gate), `/prepush` (PR readiness check).
+`/execute` (apply plan + QA gate), `/qa` (QA gate), `/prepush` (PR readiness check).
+
+This group deliberately does NOT ship the org-standard shared core team
+(architect/reviewer/security-auditor) — it mirrors the ARCRunner minimal-team
+exception. `sync-templates.sh` skips the shared `.claude` copy for group D.
 
 ## Shared CI — do not inline
 

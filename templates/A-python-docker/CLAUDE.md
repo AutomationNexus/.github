@@ -30,15 +30,21 @@ Adjust lint/test commands here once real code replaces the `REPLACE_ME` stub.
 
 | Agent | Use for | Model |
 |-------|---------|-------|
+| `architect` (high effort) | Design/boundaries/release risk — before implementing | sonnet |
 | `qa-gatekeeper` | Local QA gate — pass/fail report only, no edits | haiku |
+| `reviewer` | Independent review before PR | sonnet |
+| `security-auditor` (high effort) | Secrets, workflow changes, dependency risk | sonnet |
 
-Add `architect`/`reviewer`/`security-auditor` (opus/sonnet/opus) once the repo has real
-scope beyond the stub — see a sibling repo's `CLAUDE.md` (e.g. MediaRefinery, ModelDeck,
-Uploadarr) for the pattern to copy.
+This is the org-standard shared core (sourced from `automationnexus/.github`
+`templates/_shared/.claude/` — keep the `<!-- repo-specific -->` marker in each file
+when customizing). Add domain engineer agents (e.g. `backend-engineer`,
+`frontend-engineer`) once the repo has real scope — see a sibling repo's
+`.claude/agents/` (MediaRefinery, ModelDeck, Uploadarr) for the pattern.
 
 ## Slash commands
 
-`/qa` (QA gate), `/prepush` (PR readiness check).
+`/execute` (build pipeline), `/qa` (QA gate), `/prepush` (PR readiness check),
+`/release` (dev→main promotion).
 
 ## Shared CI — do not inline
 

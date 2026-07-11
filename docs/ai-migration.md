@@ -9,22 +9,23 @@
 | 1 | Are `CLAUDE.md` / `.claude/` committed to `main`? | **No — dev-only.** Committed on `dev`, stripped from `main` by `.github/dev-only-paths` (same mechanism as `DEVELOPMENT.md`). `main` stays a lean public artifact. |
 | 2 | Fate of retired AI-tooling machinery? | **Deleted in the same PR that adds the Claude Code files** for that repo. No parallel-tool period, no archive copies — git history preserves everything. |
 | 3 | `better-ccflare` (Claude/Anthropic proxy fork) | **Archived entirely**, not migrated. It is a standalone tool, not part of this org's dev workflow. See "better-ccflare" below. |
-| 4 | Model tiering | Use **opus / sonnet / haiku** tiers per agent role, plus thinking-effort directives in the prompt body (Claude Code has no per-agent `effort:` field — see `docs/ai-model-tiers.md` if introduced later, or the table below). |
+| 4 | Model tiering | **Current standard:** leads (`architect`, `security-auditor`, org leads) use `sonnet` + `effort: high`; implementation/review uses `sonnet`; mechanical QA/inspection uses `haiku`. Deep escalation stays in the main session (`/model opus` or `opusplan`), not a dedicated agent. |
 
 ## Model tier mapping (org-wide default)
 
-| Role | Claude Code tier | Thinking directive |
+| Role | Claude Code tier | Effort / directive |
 |------|------------------|--------------------|
-| Architect / design agent | `opus` | "think harder" in prompt |
-| Security auditor | `opus` | "think hard" in prompt |
-| Reviewer | `sonnet` | "think hard" in prompt |
+| Architect / design agent | `sonnet` | `effort: high`; "think harder" |
+| Security auditor / org security officer | `sonnet` | `effort: high`; "think hard" |
+| Org release manager / chief architect | `sonnet` | `effort: high` |
+| Reviewer | `sonnet` | "think hard" |
 | Domain engineer (implementation) | `sonnet` | default |
-| QA gatekeeper (mechanical: lint/test/report) | `haiku` | none |
-| Live inspector / read-only ops | `haiku` | none |
+| QA gatekeeper (mechanical: lint/test/report) | `haiku` | default |
+| Live inspector / org inspector (read-only ops) | `haiku` | default |
 | Deep escalation | `opus` | use `/model opus` or `opusplan` in the main session instead of a dedicated agent |
 
-Main-session default: `sonnet`. Use `opusplan` for planning-heavy sessions (opus plans,
-sonnet executes) — this replaces the old `default_agent: plan` / `build` handoff.
+Main-session model is operator-selected. Use `opusplan` for planning-heavy sessions when
+available; repo agents stay on the tiers above for consistency and predictable cost.
 
 ## Per-repo layout after migration
 
@@ -39,6 +40,25 @@ sonnet executes) — this replaces the old `default_agent: plan` / `build` hando
 ```
 
 Removed: retired AI-tooling config, bootstrap scripts, and generated runtime folders.
+
+## Agent organization (current standard)
+
+The original migration established repo-tier teams. The org now adds a second tier:
+
+- **Workspace-root session = CTO desk:** 6 org agents + 7 org commands, canonically
+  versioned in this repo's `workspace/` and copied locally by
+  `scripts/sync-workspace.sh`.
+- **Repo session = department:** 4 shared-core roles (`architect`, `qa-gatekeeper`,
+  `reviewer`, `security-auditor`) plus the repo's domain experts/commands. Canonical
+  shared skeletons live in `templates/_shared/.claude/`; per-repo content below
+  `<!-- repo-specific -->` remains local and is preserved by
+  `scripts/sync-shared-claude.sh`.
+- ARCRunner/group D remain deliberately minimal (`qa-gatekeeper` only) because their
+  one-Dockerfile/one-workflow surface does not justify a full team.
+
+`CLAUDE.md` cascades from the workspace root into repo sessions; `.claude/agents` and
+`.claude/commands` do not. Therefore org→repo handoff is a written `/dispatch` brief,
+not a nested subagent spawn.
 
 ## Rollout status
 

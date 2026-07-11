@@ -6,11 +6,16 @@
 # templates/README.md) actually true, instead of an aspirational doc line.
 #
 # Usage:
-#   scripts/sync-templates.sh          # sync all 5 groups
-#   scripts/sync-templates.sh C        # sync only group C
+#   scripts/sync-templates.sh              # sync all 5 groups
+#   scripts/sync-templates.sh C            # sync only group C
+#   scripts/sync-templates.sh --check      # report .claude/ orphans in all 5 repos, no changes
+#   scripts/sync-templates.sh --check C    # orphan report for one group
 #
 # Note: copies/overwrites files; does not delete a file from a template repo if it was
 # removed from the source bundle (rare — handle that case manually if it happens).
+# `--check` reports exactly those cases for the managed .claude/ layer: files present
+# in a template repo's .claude/ that exist in neither _shared/.claude nor the group
+# bundle. Delete reported orphans in the same (human-confirmed) sync run.
 #
 # Requires: gh (authenticated, repo scope), git.
 set -euo pipefail
@@ -67,11 +72,18 @@ copy_dir() {
 # (the invoking user's group IDs) and silently ignores assignments to it.
 # Accept either no args (all 5), or one-or-more space-separated group letters as
 # separate argv entries (e.g. `sync-templates.sh A B D`) -- NOT a single quoted string.
+CHECK_MODE=0
+if [ "${1:-}" = "--check" ]; then
+  CHECK_MODE=1
+  shift
+fi
 if [ "$#" -eq 0 ]; then
   TARGET_GROUPS=(A B C D E)
 else
   TARGET_GROUPS=("$@")
 fi
+ANY_ORPHANS=0
+FAILURES=()
 
 for GROUP in "${TARGET_GROUPS[@]}"; do
   REPO_NAME="$(group_repo "$GROUP")"
@@ -81,7 +93,33 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   echo "==> Syncing group ${GROUP} -> ${REPO}"
 
   CLONE_DIR="${WORK_DIR}/${GROUP}"
-  gh repo clone "$REPO" "$CLONE_DIR" -- --quiet
+  if ! gh repo clone "$REPO" "$CLONE_DIR" -- --quiet; then
+    echo "    FAILED: could not clone ${REPO}" >&2
+    FAILURES+=("$GROUP")
+    continue
+  fi
+
+  # ---- 0. --check mode: orphan report for the managed .claude/ layer, no changes ----
+  if [ "$CHECK_MODE" -eq 1 ]; then
+    if [ -d "${CLONE_DIR}/.claude" ]; then
+      while IFS= read -r -d '' f; do
+        rel="${f#"${CLONE_DIR}/"}"
+        known=""
+        [ -f "${SRC}/${rel}" ] && known=1
+        # settings.json is sourced from _shared's settings.json.template (renamed).
+        [ "$rel" = ".claude/settings.json" ] && known=1
+        # Shared core agents/commands apply to every group except D (mirrors the
+        # ARCRunner minimal-team exception -- see workspace/CLAUDE.md).
+        if [ "$GROUP" != "D" ] && [ -f "${SHARED}/${rel}" ]; then known=1; fi
+        if [ -z "$known" ]; then
+          echo "    ORPHAN: ${rel} (in ${REPO_NAME} but in neither _shared nor ${DIR_NAME})"
+          ANY_ORPHANS=1
+        fi
+      done < <(find "${CLONE_DIR}/.claude" -type f -print0)
+    fi
+    echo "    check done"
+    continue
+  fi
 
   # ---- 1. _shared/ base layer (every group gets this) ----
   copy_file "${SHARED}/gitignore" "${CLONE_DIR}/.gitignore"
@@ -92,6 +130,13 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   # real CLAUDE.md + .claude/agents/commands are copied below in the group overlay step
   # (CLAUDE.md.template in _shared/ is reference-only, not copied as a live file).
   copy_file "${SHARED}/.claude/settings.json.template" "${CLONE_DIR}/.claude/settings.json"
+  # Shared-core Claude team (agents + commands) for full-team groups. Group D mirrors
+  # the ARCRunner minimal-team exception (qa-gatekeeper only) and deliberately does NOT
+  # get the shared core -- see workspace/CLAUDE.md "Repo-tier standard".
+  if [ "$GROUP" != "D" ]; then
+    copy_dir "${SHARED}/.claude/agents" "${CLONE_DIR}/.claude/agents"
+    copy_dir "${SHARED}/.claude/commands" "${CLONE_DIR}/.claude/commands"
+  fi
 
   # ---- 2. group-specific overlay (canonical starter bundle, wins on conflicts) ----
   copy_dir  "${SRC}/.github" "${CLONE_DIR}/.github"
@@ -134,8 +179,20 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
       echo "    pushed sync commit"
     fi
     exit 0
-  )
+  ) || {
+    echo "    FAILED: ${REPO}" >&2
+    FAILURES+=("$GROUP")
+    continue
+  }
 done
 
+if [ "${#FAILURES[@]}" -gt 0 ]; then
+  echo "==> Completed with failures: ${FAILURES[*]}" >&2
+  exit 1
+fi
+if [ "$CHECK_MODE" -eq 1 ] && [ "$ANY_ORPHANS" -eq 1 ]; then
+  echo "==> Orphans found (see above). Delete them in the same confirmed sync run."
+  exit 1
+fi
 echo "==> Done."
 exit 0
