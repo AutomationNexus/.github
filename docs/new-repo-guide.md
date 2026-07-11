@@ -11,7 +11,7 @@ realistic model is: **template gives you the files; a one-time bootstrap script 
 
 | Thing | Auto from template? | How it gets set |
 |------|--------------------|-----------------|
-| Workflow files, dev-only-paths, gitignore | ✅ yes | template repo contents |
+| Workflow files, dev-only-paths, gitignore, `CLAUDE.md` + `.claude/` team | ✅ yes | template repo contents |
 | `dev` branch (besides `main`) | ⚠️ only with "include all branches" | bootstrap creates `dev` |
 | `CI_BOT_APP_ID`, `CI_BOT_APP_PRIVATE_KEY` | ❌ no | bootstrap sets repo secrets |
 | `PYPI_API_TOKEN` (group B) | ❌ no | bootstrap sets repo secret |
@@ -46,9 +46,24 @@ We maintain one **private template repository per group** (marked as GitHub *tem
 > A new repo created from a template has Actions **enabled** by default, so its CI runs normally.
 
 The templates are rebuilt from the canonical starter bundles in `templates/<group>/` of this
-repo via `scripts/sync-templates.sh` — run it after any change to a starter bundle. It does
-not happen automatically; verify with the "After bootstrap" checks below if you're unsure a
-template repo is current.
+repo via `scripts/sync-templates.sh` — run `scripts/sync-templates.sh --check` first, then
+the sync after explicit human confirmation (it direct-pushes to template repo `main`). It
+does not happen automatically; verify with the "After bootstrap" checks below if you're
+unsure a template repo is current.
+
+### Claude Code team included by each template
+
+Groups A/B/C/E compose the org-standard shared core from
+`templates/_shared/.claude/` (`architect`, `qa-gatekeeper`, `reviewer`,
+`security-auditor`; `/execute`, `/qa`, `/prepush`, `/release`) plus any group overlay
+(C add-on QA, E HA/yamllint QA + secret denies). Add repo-specific domain engineers after
+creation; do not rewrite the shared roles. Keep the `<!-- repo-specific -->` marker when
+adding local instructions so future `scripts/sync-shared-claude.sh` updates preserve them.
+
+Group D deliberately ships only `qa-gatekeeper` + `/execute`/`/qa`/`/prepush`, mirroring
+ARCRunner's minimal-team exception. Every group's `.claude/settings.json` is seeded from
+`templates/_shared/.claude/settings.json.template` during template sync; E overlays
+additional `secrets.yaml` denies.
 
 ## Option 2 — `gh` one-liner from a template
 
@@ -94,4 +109,14 @@ gh secret list --repo AutomationNexus/<repo>
 gh api repos/AutomationNexus/<repo>/rulesets --jq '[.[].name]'   # public only
 gh api repos/AutomationNexus/<repo> --jq '.default_branch'
 ```
-Open a test PR into dev and confirm CI + auto-merge behave.
+
+Also verify the Claude layer before implementation:
+
+```bash
+git check-ignore -v .claude/agents/qa-gatekeeper.md  # should print nothing
+python -m json.tool .claude/settings.json
+```
+
+Open Claude Code in the repo: `/agents` should list the group's roster and `/qa` should
+invoke its real QA gate. Then open a test PR into dev (main for group D) and confirm CI +
+auto-merge behave.

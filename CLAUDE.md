@@ -64,6 +64,22 @@ file) or these files will reach `main` and fail `ci.yml`'s Guard Main Files hygi
 `templates/_shared/CLAUDE.md.template` and `templates/_shared/.claude/` are the seeds
 new repos start from — keep them in sync with whatever pattern proves out during rollout.
 
+## Org-tier workspace layer (`workspace/`)
+
+`workspace/` is the canonical, versioned source for the AutomationNexus workspace root's
+`CLAUDE.md` + `.claude/` (the "CTO desk": 6 org agents + 7 org commands). The workspace
+root is not a git repo, so `scripts/sync-workspace.sh` copies this layer into place locally;
+`--check` reports drift and `--force` backs up before overwrite. Edit `workspace/` here via
+PR to `master`, never the root copies.
+
+Two separate propagation scripts serve different protection models:
+
+- `scripts/sync-templates.sh` — bundle → 5 `template-*` repos. Direct-push exception;
+  always requires explicit human confirmation. `--check` reports managed `.claude/` orphans.
+- `scripts/sync-shared-claude.sh` — `_shared/.claude` → app repos. Protected-branch-safe:
+  opens feature-branch PRs to `dev`; preserves repo-specific content; excludes ARCRunner's
+  documented minimal-team exception.
+
 ## Do not
 
 - Do not add per-repo model/provider/router config anywhere in this org. Claude Code

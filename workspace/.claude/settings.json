@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/secrets.yaml)",
+      "Read(**/*.secret.yaml)",
+      "Read(**/state.json)",
+      "Read(**/render-out/**)",
+      "Read(**/master.key)",
+      "Read(**/config.db)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git push origin dev:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin master:*)",
+      "Bash(cat .env:*)",
+      "Bash(type .env:*)",
+      "Bash(Get-Content .env:*)"
+    ]
+  }
+}

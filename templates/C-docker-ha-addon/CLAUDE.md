@@ -39,15 +39,21 @@ folder(s)), also run: `python tools/validate_ha_addon.py`, `python tools/check_b
 
 | Agent | Use for | Model |
 |-------|---------|-------|
-| `qa-gatekeeper` | Local QA gate — pass/fail report only, no edits | haiku |
+| `architect` (high effort) | Design/boundaries/release risk — before implementing | sonnet |
+| `qa-gatekeeper` | Local QA gate (incl. add-on validation) — pass/fail only, no edits | haiku |
+| `reviewer` | Independent review before PR | sonnet |
+| `security-auditor` (high effort) | Secrets, workflow changes, dependency risk | sonnet |
 
-Add `mqtt-engineer`/`addon-engineer`/`architect`/`reviewer`/`security-auditor` once the
-repo has real scope beyond the stub — see ModelDeck's `CLAUDE.md` and `.claude/agents/`
-for the dual-domain (app + add-on) pattern to copy.
+This is the org-standard shared core (sourced from `automationnexus/.github`
+`templates/_shared/.claude/`; this group overlays its own add-on-aware
+`qa-gatekeeper`/`qa`). Add domain engineers (`addon-engineer`, and e.g. `mqtt-engineer`)
+once the repo has real scope — see ModelDeck's `CLAUDE.md` and `.claude/agents/` for the
+dual-domain (app + add-on) pattern to copy.
 
 ## Slash commands
 
-`/qa` (QA gate), `/prepush` (PR readiness check).
+`/execute` (build pipeline), `/qa` (QA gate), `/prepush` (PR readiness check),
+`/release` (dev→main promotion).
 
 ## Shared CI — do not inline
 

@@ -11,3 +11,7 @@ __pycache__/
 .coverage
 dist/
 build/
+
+# Local backups created by scripts/sync-workspace.sh before overwriting the
+# non-versioned workspace-root CLAUDE.md/.claude copies.
+workspace/.backups/

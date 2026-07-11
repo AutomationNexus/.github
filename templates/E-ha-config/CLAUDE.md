@@ -35,16 +35,23 @@ Plus the HA config check (`has-ha-validate: true` in CI) when Docker is availabl
 
 | Agent | Use for | Model |
 |-------|---------|-------|
-| `qa-gatekeeper` | Local QA gate — pass/fail report only, no edits | haiku |
+| `architect` (high effort) | Design/boundaries/release risk — before implementing | sonnet |
+| `qa-gatekeeper` | Local QA gate (yamllint + HA config check) — pass/fail only, no edits | haiku |
+| `reviewer` | Independent review before PR | sonnet |
+| `security-auditor` (high effort) | Secrets, workflow changes, dependency risk | sonnet |
 
-Add `yaml-engineer`/`architect`/`reviewer`/`security-auditor`/`live-inspector` once the
-repo has real scope beyond the stub — see HomeAssistant's `CLAUDE.md` and `.claude/agents/`
-for the full pattern to copy (note: that repo is a private live-instance digital twin;
-adapt the live-inspector/drift-sync agents only if this repo also tracks a live instance).
+This is the org-standard shared core (sourced from `automationnexus/.github`
+`templates/_shared/.claude/`; this group overlays its own yamllint-flavored
+`qa-gatekeeper`/`qa` and a `secrets.yaml`-aware `settings.json`). Add
+`yaml-engineer`/`live-inspector` once the repo has real scope — see HomeAssistant's
+`CLAUDE.md` and `.claude/agents/` for the full pattern to copy (note: that repo is a
+private live-instance digital twin; adapt the live-inspector/drift-sync agents only if
+this repo also tracks a live instance).
 
 ## Slash commands
 
-`/qa` (QA gate), `/prepush` (PR readiness check).
+`/execute` (build pipeline), `/qa` (QA gate), `/prepush` (PR readiness check),
+`/release` (dev→main promotion).
 
 ## Shared CI — do not inline
 
