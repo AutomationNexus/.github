@@ -63,6 +63,7 @@ def merge_dev(dev_ref: str, strip_dev_only: bool) -> None:
         check=False,
     )
     conflicts = unresolved_paths()
+    had_conflicts = bool(conflicts)
     patterns = dev_only_patterns() if strip_dev_only else []
     stripped_conflicts = [
         path for path in conflicts if any(pattern.search(path) for pattern in patterns)
@@ -75,7 +76,10 @@ def merge_dev(dev_ref: str, strip_dev_only: bool) -> None:
         run("git", "rm", "-q", "-f", "--", *stripped_conflicts)
         conflicts = unresolved_paths()
 
-    if result.returncode != 0 or conflicts:
+    # Git returns nonzero when it stops for conflicts, even if every permitted
+    # dev-only path above was resolved by deletion. Reject failures that did not
+    # expose conflicts, and reject any conflicts that remain after that policy.
+    if (result.returncode != 0 and not had_conflicts) or conflicts:
         joined = ", ".join(conflicts) if conflicts else "unknown paths"
         run("git", "merge", "--abort", check=False)
         raise ReconcileError(
@@ -187,6 +191,7 @@ def main() -> int:
             strip_dev_only_paths()
         new_version = bump_version(args.main_ref, args.bump_type)
     except (ReconcileError, subprocess.CalledProcessError) as error:
+        run("git", "merge", "--abort", check=False)
         print(f"::error::{error}", file=sys.stderr)
         return 1
 

@@ -177,21 +177,37 @@ class PromoteReconcileTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("has no version", result.stderr)
 
-    def test_merge_failure_aborts_in_progress_merge(self) -> None:
-        self.dev_change({"binary.dat": "dev\n"})
-        git(self.repo, "checkout", "main")
-        self.write("binary.dat", "main\n")
-        self.commit("main adds same file")
-        # A directory/file conflict is not resolved by -X theirs.
-        git(self.repo, "checkout", "dev")
-        (self.repo / "conflict").mkdir()
-        self.write("conflict/file.txt", "dev\n")
-        self.commit("dev directory")
+    def test_non_dev_only_directory_file_conflict_fails_and_aborts(self) -> None:
+        self.dev_change({"conflict/file.txt": "dev content\n"})
         git(self.repo, "checkout", "main")
         self.write("conflict", "main file\n")
-        self.commit("main file")
+        self.commit("main adds conflicting file")
         result = self.reconcile(bump="none", expect_success=False)
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflict", result.stderr)
+        self.assertFalse((self.repo / ".git/MERGE_HEAD").exists())
+
+    def test_broad_dev_only_pattern_applies_to_all_matching_conflicts(self) -> None:
+        self.dev_change(
+            {
+                ".github/dev-only-paths": "^generated/",
+                "generated/one.txt": "dev one\n",
+                "generated/two.txt": "dev two\n",
+            }
+        )
+        git(self.repo, "checkout", "main")
+        self.write("generated/one.txt", "main one\n")
+        self.write("generated/two.txt", "main two\n")
+        self.commit("main changes generated paths")
+        self.reconcile(bump="none", strip=True)
+        self.assertFalse((self.repo / "generated/one.txt").exists())
+        self.assertFalse((self.repo / "generated/two.txt").exists())
+
+    def test_invalid_manifest_regex_fails_closed(self) -> None:
+        self.dev_change({".github/dev-only-paths": "[not-valid\n"})
+        result = self.reconcile(bump="none", strip=True, expect_success=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid .github/dev-only-paths pattern", result.stderr)
         self.assertFalse((self.repo / ".git/MERGE_HEAD").exists())
 
 
