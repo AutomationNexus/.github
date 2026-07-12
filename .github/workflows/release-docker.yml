@@ -128,6 +128,8 @@ jobs:
   build-and-push:
     name: Build & Push
     runs-on: ${{ fromJSON(inputs.publish-runner) }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     # Always build (tag_push, dispatch, main_push → validation already passed)
     if: |
       !cancelled() && (
@@ -158,7 +160,8 @@ jobs:
             type=semver,pattern={{major}},value=${{ needs.prepare.outputs.tag_name }}
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -178,25 +181,61 @@ jobs:
     needs: [prepare, build-and-push]
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     continue-on-error: true
+    env:
+      IMAGE_TAG: ghcr.io/${{ inputs.image-name }}:${{ needs.prepare.outputs.tag_name }}
+      IMAGE_DIGEST: ${{ needs.build-and-push.outputs.digest }}
     steps:
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@master
+      - name: Scan image with Trivy
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8
         with:
-          image-ref: ghcr.io/${{ inputs.image-name }}:${{ needs.prepare.outputs.tag_name }}
+          image-ref: ${{ env.IMAGE_TAG }}@${{ env.IMAGE_DIGEST }}
           format: json
           output: trivy-report.json
+          scanners: vuln
           severity: HIGH,CRITICAL
           exit-code: "0"
+      - name: Create scan evidence fallback
+        if: always() && steps.trivy.outcome == 'failure' && !hashFiles('trivy-report.json')
+        env:
+          TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          report = {
+              "image": os.environ["IMAGE_TAG"],
+              "digest": os.environ["IMAGE_DIGEST"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "scan_completed": False,
+              "scanner": "trivy",
+              "scanner_outcome": os.environ.get("TRIVY_OUTCOME", "failure"),
+              "error_classification": "scanner_runtime_failure",
+              "remediation": "Review the Container Scan job logs and rerun the workflow after remediation.",
+          }
+          with open("trivy-report.json", "w", encoding="utf-8") as handle:
+              json.dump(report, handle, indent=2)
+          PY
+      - name: Summarize scan outcome
+        if: always()
+        run: |
+          if [ "${{ steps.trivy.outcome }}" = "failure" ]; then
+            echo "::warning::Trivy scanner runtime failure; fallback evidence was generated. Review Container Scan logs." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Trivy completed; HIGH/CRITICAL vulnerability findings remain advisory (exit-code=0)." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-report-${{ github.run_id }}
           path: trivy-report.json
-          retention-days: 1
+          if-no-files-found: error
+          retention-days: 14
 
   publish-release:
     name: Publish GitHub Release
