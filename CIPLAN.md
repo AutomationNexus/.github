@@ -55,7 +55,7 @@
 - docker/setup-buildx-action@v4, docker/login-action@v4, docker/build-push-action@v7
 - actions/upload-artifact@v7, actions/download-artifact@v8
 - softprops/action-gh-release@v3
-- aquasecurity/trivy-action@master (optional, advisory)
+- aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8 (optional, advisory; immutable pin)
 - actions/deploy-pages@v5, actions/upload-pages-artifact@v5
 
 ## Rulesets
