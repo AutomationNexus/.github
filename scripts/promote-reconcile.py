@@ -34,8 +34,24 @@ def unresolved_paths() -> list[str]:
     return [path for path in result.stdout.splitlines() if path]
 
 
-def merge_dev(dev_ref: str) -> None:
-    """Merge dev into the main-based branch, preferring dev for ordinary conflicts."""
+def dev_only_patterns() -> list[re.Pattern[str]]:
+    manifest = Path(".github/dev-only-paths")
+    if not manifest.is_file():
+        return []
+
+    patterns = [
+        line.strip()
+        for line in manifest.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    try:
+        return [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+    except re.error as error:
+        raise ReconcileError(f"Invalid .github/dev-only-paths pattern: {error}") from error
+
+
+def merge_dev(dev_ref: str, strip_dev_only: bool) -> None:
+    """Merge dev into the main-based branch, preferring dev except for stripped paths."""
     result = run(
         "git",
         "merge",
@@ -47,6 +63,18 @@ def merge_dev(dev_ref: str) -> None:
         check=False,
     )
     conflicts = unresolved_paths()
+    patterns = dev_only_patterns() if strip_dev_only else []
+    stripped_conflicts = [
+        path for path in conflicts if any(pattern.search(path) for pattern in patterns)
+    ]
+    if stripped_conflicts:
+        print(
+            "Resolving dev-only merge conflicts by removing: " + ", ".join(stripped_conflicts),
+            file=sys.stderr,
+        )
+        run("git", "rm", "-q", "-f", "--", *stripped_conflicts)
+        conflicts = unresolved_paths()
+
     if result.returncode != 0 or conflicts:
         joined = ", ".join(conflicts) if conflicts else "unknown paths"
         run("git", "merge", "--abort", check=False)
@@ -78,18 +106,9 @@ def strip_dev_only_paths() -> None:
     if not manifest.is_file():
         return
 
-    patterns = [
-        line.strip()
-        for line in manifest.read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    try:
-        regexes = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
-    except re.error as error:
-        raise ReconcileError(f"Invalid .github/dev-only-paths pattern: {error}") from error
-
+    patterns = dev_only_patterns()
     tracked = run("git", "ls-files", capture_output=True).stdout.splitlines()
-    paths = [path for path in tracked if any(regex.search(path) for regex in regexes)]
+    paths = [path for path in tracked if any(pattern.search(path) for pattern in patterns)]
     if paths:
         print("Removing dev-only paths: " + ", ".join(paths), file=sys.stderr)
         run("git", "rm", "-q", "-f", "--", *paths)
@@ -161,9 +180,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        merge_dev(args.dev_ref)
+        strip_dev_only = args.strip_dev_only_paths == "true"
+        merge_dev(args.dev_ref, strip_dev_only)
         restore_main_owned_paths(args.main_ref, args.exclude_paths)
-        if args.strip_dev_only_paths == "true":
+        if strip_dev_only:
             strip_dev_only_paths()
         new_version = bump_version(args.main_ref, args.bump_type)
     except (ReconcileError, subprocess.CalledProcessError) as error:

@@ -133,19 +133,25 @@ class PromoteReconcileTests(unittest.TestCase):
         self.reconcile(bump="none", excludes="new-owned.txt")
         self.assertEqual((self.repo / "new-owned.txt").read_text(), "dev introduces it\n")
 
-    def test_strip_dev_only_paths(self) -> None:
+    def test_strip_dev_only_paths_and_resolve_their_conflicts(self) -> None:
         self.dev_change(
             {
-                ".github/dev-only-paths": "^CLAUDE\\.md$\n^\\.claude/\n",
+                ".github/dev-only-paths": "# Developer tooling\n^CLAUDE\\.md$\n^\\.claude/\n",
                 "CLAUDE.md": "development instructions\n",
                 ".claude/settings.json": "{}\n",
                 "feature.txt": "keep me\n",
             }
         )
+        git(self.repo, "checkout", "main")
+        self.write("CLAUDE.md", "released instructions\n")
+        self.write(".claude/settings.json", '{"main": true}\n')
+        self.commit("main changes dev-only paths")
         self.reconcile(bump="none", strip=True)
         self.assertFalse((self.repo / "CLAUDE.md").exists())
         self.assertFalse((self.repo / ".claude/settings.json").exists())
         self.assertEqual((self.repo / "feature.txt").read_text(), "keep me\n")
+        self.assertFalse((self.repo / ".git/MERGE_HEAD").exists())
+
 
     def test_main_pyproject_fallback_and_patch_rollover(self) -> None:
         git(self.repo, "tag", "-d", "v0.0.7")
