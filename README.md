@@ -8,7 +8,7 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 |----------|---------|----------------------|
 | `ci.yml` | Unified CI: guards + hygiene + lint + test + optional frontend/e2e/integration/security/ha/addon | `branch-model`, `auto-revert`, `runner-labels`, `has-*`, `lint-paths`, `security-paths`, `pip-install-cmd`, `test-cmd`, `pre/post-test-cmd`, e2e-* · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 | `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | `main-only` (bool, default `false`; repo has no `dev` branch, so `feature→main` PRs are squash-merged the same way `feature→dev` PRs are) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
-| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (paths main owns exclusively; promoted via a throwaway branch instead of dev directly), `strip-dev-only-paths` (bool; deletes files matching `.github/dev-only-paths` from the promote branch, e.g. `CLAUDE.md`/`.claude/`), `bump-type` (`patch`/`minor`/`major`/`none`, default `patch`; bumps `pyproject.toml`'s version off the latest `vX.Y.Z` tag reachable on main, folded into the promote branch) · CI-Bot secrets |
+| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (main-owned paths restored after a throwaway branch based on current main merges dev), `strip-dev-only-paths` (bool; deletes files matching `.github/dev-only-paths` from the promote branch, e.g. `CLAUDE.md`/`.claude/`), `bump-type` (`patch`/`minor`/`major`/`none`, default `patch`; bumps `pyproject.toml`'s version off the latest `vX.Y.Z` tag reachable on main, folded into the promote branch) · CI-Bot secrets |
 | `nightly.yml` | Nightly Docker build from dev | `image-name`, `platforms`, `force_run`, `has-frontend`, `coverage-threshold`, `pip-install-cmd`, `test-cmd` |
 | `release-docker.yml` | Tag (from pyproject) → build/push GHCR → Release → Trivy | `image-name`, `platforms`, `tag_name`, `has-frontend`, `has-validation` |
 | `release-pypi.yml` | Tag (from pyproject) → build wheel → PyPI upload (token) → Release | `has-frontend`, `tag_name` · secret: `pypi-api-token` |
@@ -40,6 +40,19 @@ feature → PR to dev → ci.yml (guards/lint/test/…) + semgrep → auto-merge
 dev → nightly.yml (build :nightly)
 promote-dev-to-main (CI-Bot): dev CI green → dev→main PR → its CI green → merge
 main push → release-{docker|pypi}.yml → tag (from pyproject) → publish → GitHub Release
+```
+
+### Promotion reconciliation
+
+When `exclude-paths`, `strip-dev-only-paths`, or a version bump requires a temporary
+promotion branch, it starts at the current `main` snapshot and merges `dev` into it.
+Ordinary overlapping content follows `dev`; `exclude-paths` are then restored from
+`main`, dev-only paths are removed, and the workflow-owned version bump is applied.
+The branch is rebuilt from fresh refs if `main` moves while it is being promoted.
+Run the isolated regression suite with:
+
+```bash
+python -m unittest tests/test_promote_reconcile.py
 ```
 
 ## New repos

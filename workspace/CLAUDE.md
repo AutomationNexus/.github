@@ -92,8 +92,11 @@ A version-bump/reconciliation commit can't be pushed straight to `dev` or
 `main` — their rulesets reject direct pushes even from the CI-Bot's bypass
 identity. Whenever `exclude-paths`, `strip-dev-only-paths=true`, or
 `bump-type != none` is set, the promote workflow instead builds a throwaway
-`sync/publish-main-promote-<run>-<n>` branch off `dev`, commits the
-reconciliation there, and PRs *that* branch into `main`.
+`sync/publish-main-promote-<run>-<n>` branch from the current `main` snapshot,
+merges `dev` into it (with dev winning ordinary content conflicts), restores
+explicitly main-owned `exclude-paths`, strips dev-only paths, and applies the
+version bump before PRing *that* branch into `main`. A retry rebuilds the branch
+from freshly fetched refs if `main` moves during the promotion.
 
 ## Concurrent-agent protocol
 
