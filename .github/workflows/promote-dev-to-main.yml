@@ -11,9 +11,8 @@ on:
         description: >-
           Newline-separated list of paths that main owns exclusively and that this promote
           must never overwrite with dev's copy (e.g. a nightly-channel add-on pointer file
-          published straight to main by another workflow). When set, the promote PR is built
-          from a throwaway branch cut from dev with these paths restored to main's current
-          content, instead of promoting dev directly.
+          published straight to main by another workflow). A throwaway branch is based on
+          main, merges dev's changes, then restores these paths to main's current content.
         required: false
         default: ""
         type: string
@@ -103,6 +102,17 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.bot-token.outputs.token }}
 
+      # Reusable workflow files execute in the caller repository, so obtain the matching
+      # helper from the stable shared-workflow ref without adding it to the promote branch.
+      - name: Checkout promotion reconciliation helper
+        uses: actions/checkout@v6
+        with:
+          repository: automationnexus/.github
+          ref: v1
+          path: .promotion-workflow-tools-${{ github.run_id }}
+          fetch-depth: 1
+          token: ${{ steps.bot-token.outputs.token }}
+
       - name: Promote dev to main via PR (CI-Bot)
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
@@ -110,6 +120,7 @@ jobs:
           EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
           STRIP_DEV_ONLY_PATHS: ${{ inputs.strip-dev-only-paths }}
           BUMP_TYPE: ${{ inputs.bump-type }}
+          PROMOTION_TOOLS_DIR: .promotion-workflow-tools-${{ github.run_id }}
         run: |
           set -euo pipefail
           ahead=$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')
@@ -130,127 +141,48 @@ jobs:
             PR_TITLE="${PR_TITLE} (Major)"
           fi
 
-          # The temp branch is a point-in-time snapshot of main. If another workflow (e.g. a
-          # nightly pointer publish) pushes to main between when the snapshot was taken and
-          # when this PR merges, the merge can conflict. Retry the whole build+PR+merge cycle
-          # from a fresh main snapshot a few times before giving up -- this is a real,
-          # observed race, not a hypothetical.
+          # A reconciliation branch starts from a fresh main snapshot, then merges dev. This
+          # handles historical dev/main divergence (not just a main update during this run):
+          # the resulting PR already contains main as an ancestor. If main moves while the PR
+          # is being validated or merged, rebuild the whole branch from fresh refs and retry.
           for RETRY in 1 2 3; do
             HEAD_BRANCH="dev"
 
             if [ -n "${NEEDS_TEMP_BRANCH}" ]; then
-              echo "building a reconciled promote branch (attempt ${RETRY}/3)"
-              git checkout dev
+              echo "building a main-based reconciled promote branch (attempt ${RETRY}/3)"
               git config user.name "github-actions[bot]"
               git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              git fetch origin main
+              git fetch origin main dev
               TEMP_BRANCH="sync/publish-main-promote-${{ github.run_id }}-${RETRY}"
-              git checkout -b "${TEMP_BRANCH}"
-
-              if [ -n "${EXCLUDE_PATHS}" ]; then
-                echo "exclude-paths set - preserving main's copy of:"
-                echo "${EXCLUDE_PATHS}"
-                while IFS= read -r p; do
-                  [ -z "${p}" ] && continue
-                  if git cat-file -e "origin/main:${p}" 2>/dev/null; then
-                    git checkout origin/main -- "${p}"
-                  else
-                    echo "  ${p}: not on main yet, keeping dev's copy as introduced"
-                  fi
-                done <<< "${EXCLUDE_PATHS}"
-              fi
-
-              if [ "${STRIP_DEV_ONLY_PATHS}" = "true" ] && [ -f .github/dev-only-paths ]; then
-                echo "strip-dev-only-paths set - removing files matching .github/dev-only-paths:"
-                mapfile -t dev_only_files < <(git ls-files | grep -iE -f .github/dev-only-paths || true)
-                if [ "${#dev_only_files[@]}" -gt 0 ]; then
-                  printf '  %s\n' "${dev_only_files[@]}"
-                  git rm -q -- "${dev_only_files[@]}"
-                else
-                  echo "  none tracked, nothing to strip"
-                fi
-              fi
-
-              NEW_VERSION=""
-              if [ "${BUMP_TYPE}" != "none" ] && [ -f pyproject.toml ]; then
-                echo "bump-type=${BUMP_TYPE} - computing new version from the latest vX.Y.Z tag reachable on main"
-                NEW_VERSION=$(python3 - "${BUMP_TYPE}" <<'PYEOF'
-          import re, subprocess, sys
-
-          bump_type = sys.argv[1]
-
-          tags = subprocess.run(
-              ["git", "tag", "--list", "v*.*.*", "--merged", "origin/main"],
-              capture_output=True, text=True, check=True,
-          ).stdout.splitlines()
-
-          versions = [
-              tuple(int(g) for g in m.groups())
-              for m in (re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", t.strip()) for t in tags)
-              if m
-          ]
-
-          if versions:
-              x, y, z = max(versions)
-          else:
-              # No release tag yet - fall back to main's current pyproject.toml version,
-              # then 0.0.0 for a first-ever release.
-              x, y, z = 0, 0, 0
-              content = subprocess.run(
-                  ["git", "show", "origin/main:pyproject.toml"],
-                  capture_output=True, text=True,
-              ).stdout
-              m = re.search(r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
-              if m:
-                  x, y, z = (int(g) for g in m.groups())
-
-          if bump_type == "major":
-              x, y, z = x + 1, 1, 1
-          elif bump_type == "minor":
-              x, y, z = x, y + 1, 1
-          else:
-              z += 1
-              if z > 99:
-                  y += 1
-                  z = 1
-
-          new_version = f"{x}.{y}.{z}"
-
-          with open("pyproject.toml") as f:
-              content = f.read()
-
-          new_content, n = re.subn(
-              r'(?m)^(version\s*=\s*)"\d+\.\d+\.\d+"',
-              lambda mm: f'{mm.group(1)}"{new_version}"',
-              content,
-              count=1,
-          )
-          if n == 0:
-              print('::error::pyproject.toml has no version = "X.Y.Z" line to bump', file=sys.stderr)
-              sys.exit(1)
-
-          with open("pyproject.toml", "w") as f:
-              f.write(new_content)
-
-          print(new_version)
-          PYEOF
-                )
+              git checkout -B "${TEMP_BRANCH}" origin/main
+              NEW_VERSION=$(python3 "${PROMOTION_TOOLS_DIR}/scripts/promote-reconcile.py" \
+                --main-ref origin/main \
+                --dev-ref origin/dev \
+                --exclude-paths "${EXCLUDE_PATHS}" \
+                --strip-dev-only-paths "${STRIP_DEV_ONLY_PATHS}" \
+                --bump-type "${BUMP_TYPE}")
+              if [ -n "${NEW_VERSION}" ]; then
                 echo "Bumping version to ${NEW_VERSION}"
-                git add pyproject.toml
               fi
 
+              # The helper checkout is workflow tooling, never promotion content.
+              rm -rf "${PROMOTION_TOOLS_DIR}"
+              git add -A
               if git diff --cached --quiet; then
-                echo "No changes needed - dev's copy already matches what main should have."
+                echo "No changes needed after reconciling dev onto main."
               else
                 if [ -n "${NEW_VERSION}" ]; then
-                  git commit -m "chore(promote): reconcile promote branch, bump version to ${NEW_VERSION}"
+                  git commit -m "chore(promote): reconcile dev onto main, bump version to ${NEW_VERSION}"
                 else
-                  git commit -m "chore(promote): reconcile main-owned/dev-only paths"
+                  git commit -m "chore(promote): reconcile dev onto main"
                 fi
+              fi
+              if ! git merge-base --is-ancestor origin/main "${TEMP_BRANCH}"; then
+                echo "::error::Reconciled promotion branch is not based on current main."; exit 1
               fi
               ahead2=$(git rev-list --count origin/main.."${TEMP_BRANCH}")
               if [ "${ahead2}" = "0" ]; then
-                echo "Nothing to promote after path reconciliation."; exit 0
+                echo "Nothing to promote after reconciliation."; exit 0
               fi
               git push origin "${TEMP_BRANCH}"
               HEAD_BRANCH="${TEMP_BRANCH}"
