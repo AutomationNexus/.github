@@ -29,7 +29,7 @@ source of truth; this file is a snapshot, not a generator.
 |---|---|---|---|---|
 | `.github` | meta | meta-core | conformant | Full roster (architect, workflow-engineer, reviewer, security-auditor, qa-gatekeeper) present; this audit's own subject. |
 | `CognitiveSystems` | full | full-core | conformant | `/pr` routing defect (PR #56) confirmed fixed live. |
-| `MediaRefinery` | full | full-core | conformant | `domain_agents` registry correction confirmed live. CODEOWNERS present but inert (fully commented out). |
+| `MediaRefinery` | full | full-core | conformant | `domain_agents` registry correction confirmed live. Org-team CODEOWNERS active on `dev` (PR #35) and `main` (2026-07-14 promote). |
 | `ModelDeck` | full | full-core | exception (confirmed) | `main` default branch is a documented, re-verified exception. Architect routing + settings.json denies confirmed fixed live. |
 | `Uploadarr` | full | full-core | conformant | `domain_agents` registry correction confirmed live. |
 | `HomeAssistant` | config-only | full-core | conformant | Full 8-role roster + `dry-run-deploy` orchestration entry confirmed live, exact match. |
@@ -64,7 +64,7 @@ settings -- is tracked separately; see "Still open" in `organogram.md`.)
 
 - Core roster + domain agents (`backend-engineer`, `frontend-engineer`) present, matching the registry's 2026-07-14 correction (previously recorded as `[]`).
 - Commands: `execute`, `frontend`, `prepush`, `qa`, `release` -- all resolve. Minor routing asymmetry (frontend-engineer has a dedicated `/frontend` dispatch command, backend-engineer does not) is noted but not a defect -- no broken reference results from it.
-- `.github/CODEOWNERS` confirmed still fully commented out (no active owner line) -- registered as inert per plan Section 5's "temporary individual fallback" allowance, not yet actioned.
+- `.github/CODEOWNERS` carries active org-team ownership (superseding the prior fully-commented-out placeholder this record previously called "inert") -- merged to `dev` via PR #35, and to `main` via the 2026-07-14 patch-bump promote.
 - Status: **conformant**.
 
 ## ModelDeck
@@ -172,3 +172,18 @@ template repos' `CLAUDE.md`s (A/B/C/E) was a symptom of the same sync gap
 documented above -- it was resolved by the `scripts/sync-templates.sh` run
 of 2026-07-14 (see "Template repos ... resolved" above), not by a separate
 prose edit.
+
+## CODEOWNERS `main`-branch consistency, resolved 2026-07-14
+
+At the time of the original audit above, org-team CODEOWNERS was live on
+every app repo's `dev` branch but had drifted independently on `main`
+(CognitiveSystems/HomeAssistant: stale `* @t-abraham`; MediaRefinery:
+commented-out placeholder -- the "inert" note corrected above; Uploadarr/
+ModelDeck: missing entirely). All 5 app repos (CognitiveSystems,
+MediaRefinery, Uploadarr, HomeAssistant, ModelDeck) now carry identical
+org-team CODEOWNERS content on `main`, landed via real `bump-type: patch`
+`promote-dev-to-main.yml` dispatches after a direct CODEOWNERS-only PR into
+`main` proved structurally blocked by `ci.yml`'s `guard-main-source` check.
+`git show origin/main:.github/CODEOWNERS` for each repo matches that repo's
+`origin/dev` copy. See `organogram.md`'s "Resolved" item #12 for the full
+account.
