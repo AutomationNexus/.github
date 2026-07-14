@@ -213,13 +213,42 @@ repo's sibling clone (see "Resolved" #7 below).
     — resolved by merging `master` into the PR branch so the checks would
     run, not by bypassing the ruleset. `.github` PR #24 then merged, landing
     this governance package on `master`.
+11. **Shared-core drift propagation (`sync-shared-claude.sh`),
+    human-confirmed 2026-07-14.** `.github` PR #24 had edited 3 canonical
+    shared-core files (`agents/security-auditor.md`, `commands/execute.md`,
+    `commands/release.md`) without propagating them downstream.
+    `sync-shared-claude.sh` run against all 5 app repos (CognitiveSystems,
+    MediaRefinery, ModelDeck, Uploadarr, HomeAssistant; ARCRunner excluded by
+    its documented minimal-team exception) opened one PR per repo, each
+    touching exactly those 3 files and preserving every repo's own
+    `description:` line and repo-specific content below the
+    `<!-- repo-specific -->` marker. All 5 merged into `dev` via
+    `auto-merge.yml`; re-diffed canonical vs. each repo's `origin/dev`
+    afterward — all 8 shared files (the 3 just propagated plus the 5 already
+    in sync) report identical.
+12. **CODEOWNERS `main`-branch consistency (all 5 app repos),
+    human-confirmed 2026-07-14.** Item #10 above landed org-team CODEOWNERS
+    on every repo's `dev` branch; `main` had independently drifted per repo
+    (CognitiveSystems/HomeAssistant: stale `* @t-abraham`; MediaRefinery:
+    commented-out placeholder; Uploadarr/ModelDeck: missing entirely). The
+    originally planned fix — a CODEOWNERS-only PR branched straight from
+    `origin/main` — turned out structurally impossible: `ci.yml`'s
+    `guard-main-source` job rejects any PR into `main` whose head isn't
+    `dev` or the `sync/publish-main-*` promote-artifact glob, for every repo
+    running `branch-model: main-dev`. Renaming a branch to fake-match the
+    glob was considered and rejected as masquerading as a promote artifact.
+    Fix: dispatched real `promote-dev-to-main.yml` runs (`bump-type: patch`)
+    for all 5 repos instead, carrying the already-correct `dev` CODEOWNERS to
+    `main` through the org's actual sanctioned promote mechanism
+    (HomeAssistant's caller declares no `bump-type` input at all, unlike the
+    other 4 — dispatched with no flags, which the reusable workflow's own
+    default silently no-ops there for a repo with no `pyproject.toml`).
+    Version bumps landed as an accepted side effect (CognitiveSystems 0.0.9,
+    MediaRefinery 0.0.5, Uploadarr 0.0.8, ModelDeck 0.0.11) with releases
+    published. `git show origin/main:.github/CODEOWNERS` confirmed identical
+    to each repo's `origin/dev` copy afterward. CODEOWNERS rollout is now
+    fully closed on both `dev` and `main` for every repo.
 
 ### Still open
 
-One item remains, staged and human-gated:
-
-1. **`sync-shared-claude.sh` runs** — propagates `templates/_shared/.claude/`
-   updates to the app repos via protected-branch-safe PRs to `dev`. Not yet
-   run this pass. `sync-workspace.sh` and `sync-templates.sh` are done (see
-   item #9); team creation, CODEOWNERS rollout, and ruleset/security changes
-   are done (see item #10).
+Nothing remains open for this rollout.
