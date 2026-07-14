@@ -7,7 +7,8 @@ Dispatch `release-manager` for: $ARGUMENTS
 
 It must: verify the target repo's `dev` CI is green; agree the bump-type with the user
 (`patch` default); STOP for explicit confirmation before running
-`gh workflow run promote-dev-to-main.yml --repo AutomationNexus/<repo> -f bump-type=…`;
+`gh workflow run promote-dev-to-main.yml --repo AutomationNexus/<repo> -f bump-type=…`
+(`human-confirmation-required` per `CLAUDE.md`'s "Unified authority and confirmation");
 then monitor promote run → promote PR → main CI → release tag, reporting each gate.
 
 Scope guard: only CognitiveSystems / MediaRefinery / ModelDeck / Uploadarr are

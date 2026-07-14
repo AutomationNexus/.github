@@ -74,3 +74,22 @@ Claude Code talks directly to Anthropic with the operator's own account.
 
 See [`docs/ai-migration.md`](docs/ai-migration.md) for the full decision record, model-tier
 mapping, and per-repo rollout status.
+
+### Governance
+
+The AI agent organization (org-tier + per-repo teams), the human GitHub teams that
+actually hold permissions, repository ownership, and every documented exception are
+tracked in [`governance/registry.yml`](governance/registry.yml) — the single source of
+truth. Read [`governance/README.md`](governance/README.md) first for terminology and
+the human-vs-AI distinction (AI agents hold no GitHub permissions or team membership;
+only `human_teams` do), then [`governance/organogram.md`](governance/organogram.md) for
+the rendered hierarchy and repo/team/task matrix. Validate the registry and every
+agent/command file against it with:
+
+```bash
+python scripts/validate-governance.py [--live]
+```
+
+`--live` additionally cross-checks the registry against real GitHub state (default
+branches, teams, rulesets); failures there are reported as `permission-limited`, not
+errors, when the query itself is unauthorized rather than the state being wrong.

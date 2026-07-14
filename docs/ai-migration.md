@@ -1,6 +1,14 @@
 # AI workflow migration to Claude Code
 
 > Status: **COMPLETE.** Decisions below are final; this doc records the rollout.
+>
+> This doc is a historical decision/rollout record. For the current, maintained
+> org/repo agent roster, human GitHub teams, ownership, and exceptions, treat
+> [`governance/registry.yml`](../governance/registry.yml) as authoritative —
+> see [`governance/README.md`](../governance/README.md) and
+> [`governance/organogram.md`](../governance/organogram.md). Where this doc's
+> "Agent organization" or "Model tier mapping" sections ever disagree with the
+> registry, the registry wins; this doc is not updated per-agent-change.
 
 ## Decisions (final)
 

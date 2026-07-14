@@ -13,6 +13,13 @@ broken and you're not sure why.
 > `scripts/sync-workspace.sh` — hand-edits here get flagged as drift and
 > overwritten (after a backup) on the next sync.
 
+The canonical source of truth for org agents, commands, human teams, repo
+ownership, and documented exceptions is `automationnexus/.github`'s
+`governance/registry.yml` — see `governance/README.md` for terminology and the
+human-vs-AI distinction, and `governance/organogram.md` for a rendered
+hierarchy and repo/team/task matrix. This file's Org roster table below is a
+convenience summary; the registry is authoritative if they ever disagree.
+
 ## Org map
 
 - **`.github`** (`automationnexus/.github`) — the meta-repo. Owns every
@@ -197,16 +204,100 @@ Commands: `/org-status` (status sweep), `/dispatch` (route a task),
 `/sync-templates` (template repo sync, human-confirmed), `/sync-workspace`
 (root copy refresh), `/new-repo` (guided repo bootstrap).
 
-### Handoff protocol (org → repo)
+### Org-root operating protocol
 
-Subagents cannot spawn other subagents, and repo-tier agents are not loaded
-at the root — so the handoff is a **brief, not a spawn**. `/dispatch`
-produces a per-repo handoff brief (goal, constraints, file paths, ordering,
-which repo agents/commands to use); the human then opens a Claude Code
-session in the target repo and works from the brief. For small mechanical
-cross-repo edits, the root session may edit files and open PRs directly —
-allowed, but follow each repo's `CLAUDE.md` and run its QA gate commands
-manually (its QA agents aren't loaded here).
+A workspace-root session is the **orchestrator/CTO desk**, not a hidden
+super-repo engineer. Every non-trivial request follows this lifecycle:
+
+1. **Classify and route.** Identify the request type and route it:
+   status → `org-inspector` (`/org-status`); cross-repo design → `chief-architect`
+   (`/dispatch`); `.github` platform work → `platform-engineer`; release/promote
+   → `release-manager` (`/promote`); security → `security-officer` (`/org-audit`);
+   template drift → `template-steward` (`/sync-templates`); new repo →
+   `chief-architect` (`/new-repo`).
+2. **Refresh state.** Before planning or acting, capture local branch/dirty
+   state and live PR/workflow/ruleset state for every affected repo — see
+   "Concurrent-agent protocol" above and the "Emergency / doubt checklist"
+   below. A `cancelled` run is ambiguous until you check for a resulting
+   PR/tag; don't assume it did nothing.
+3. **Build the dependency graph.** Shared-workflow/canonical `.github`
+   changes land first; consumers follow; workspace/template propagation
+   (`sync-workspace.sh`/`sync-shared-claude.sh`/`sync-templates.sh`) only
+   happens after the canonical change merges.
+4. **Delegate bounded work.** Every org-agent assignment names scope, inputs,
+   allowed actions, output format, dependencies, and completion criteria. No
+   agent expands its own scope or performs an outward-facing action that was
+   delegated only as research — see "Unified authority" below.
+5. **Produce repo handoffs.** Repo-tier agents are location-bound and cannot
+   be spawned from the root — `/dispatch` emits a handoff brief per affected
+   repo instead (see "Handoff packet" below).
+6. **Collect handbacks.** Require each repo session to return the handback
+   packet (see below) before treating that repo's slice as done.
+7. **Close out from live evidence.** Re-check PR/check/release state before
+   declaring the cross-repo task complete; record unresolved blockers and
+   `permission-limited` checks explicitly rather than omitting them.
+
+For small mechanical cross-repo edits, the root session may edit files and
+open PRs directly instead of producing a full handoff — allowed, but follow
+each repo's `CLAUDE.md` and run its QA gate commands manually (its QA agents
+aren't loaded here).
+
+#### Handoff packet (org → repo)
+
+Every `/dispatch` handoff brief includes:
+
+- repository and execution order relative to other repos in this task;
+- goal, non-goals, starting/target branch;
+- likely paths and relevant `CLAUDE.md` constraints;
+- required repo agents/commands and risk track (see repo-tier standard below);
+- shared-workflow/template dependencies this repo's change relies on;
+- file ownership and forbidden overlap (when more than one repo/agent touches
+  related paths);
+- permission/secret constraints;
+- review, security, QA, runtime, and rollback requirements;
+- expected PR target, release/version impact, and escalation triggers;
+- the required handback fields (below) — restated so the repo session knows
+  what it must return.
+
+#### Handback packet (repo → org)
+
+Every repo session working from a handoff brief returns:
+
+- repo, branch, PR, commits, files changed;
+- tests/QA/runtime verification, with pass/fail evidence — not just "ran QA";
+- review/security disposition;
+- deviations from the brief and any integration conflicts found;
+- open risks, follow-up work, and any promote/release/admin action still
+  required.
+
+The org root reconciles handbacks against the dependency graph from step 3
+before marking the cross-repo task complete.
+
+### Unified authority and confirmation
+
+- Read-only agents remain read-only regardless of what a peer agent requests.
+- A peer agent may recommend an action or request analysis; it cannot grant
+  permission, user approval, elevated scope, or authorize a
+  destructive/outward-facing operation on another agent's behalf.
+- A state-changing action requires both authority from the main session's
+  task **and**, for the classes below, explicit human confirmation naming
+  the action, repo, target, and material options in the current turn.
+- Always confirm before: a `sync-templates.sh` direct-push run, a
+  promote/release dispatch, repo/secret creation, any non-`GET` admin API
+  call, a ruleset/team/security-setting change, or a force-overwrite of
+  generated workspace drift (`sync-workspace.sh --force`).
+- No direct push to a protected trunk (`dev`/`main`/`master`) from any
+  session, org or repo tier — the sole standing exception is
+  `sync-templates.sh`'s documented direct-push to the 5 `template-*` repos'
+  `main`.
+- No consumer repo forks a shared workflow to avoid escalating to
+  `platform-engineer`/`.github` — see "Reusable-workflow architecture" above.
+
+Every command's `confirmation_class` in `governance/registry.yml`
+(`read-only` / `repo-write` / `cross-repo-write` / `admin-state` /
+`human-confirmation-required`) is a ceiling, not a suggestion: an agent
+invoked by a `read-only` command cannot make a `human-confirmation-required`
+change just because a user asked for one inside that conversation.
 
 ### Escalation (repo → org)
 
