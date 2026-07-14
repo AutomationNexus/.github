@@ -222,11 +222,12 @@ repositories:
     dev_only_files: false
     sync_role: canonical-source
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
       Canonical source for workspace/ (org tier) and templates/_shared/.claude/
       (repo core). This registry lives here. architect + security-auditor roles are
-      being added to this repo's own team (governance/organogram.md open items).
+      present in .claude/agents/ -- meta-repo team complete (organogram.md open items
+      #1, resolved).
 
   - repo: CognitiveSystems
     class: full
@@ -238,7 +239,7 @@ repositories:
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
     state: needs-verification
-    notes: "CLAUDE.md previously routed to a nonexistent /pr command -- see organogram.md open items."
+    notes: "CLAUDE.md's /pr routing defect fixed (CognitiveSystems PR #56, 2026-07-14)."
 
   - repo: MediaRefinery
     class: full
@@ -253,7 +254,7 @@ repositories:
 
   - repo: ModelDeck
     class: full
-    default_branch: dev
+    default_branch: main
     branch_flow: >-
       feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main ->
       release.yml (+ push-triggered add-on-only path on modeldeck/**, bump-type=none)
@@ -263,12 +264,23 @@ repositories:
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
-    state: needs-verification
+    state: exception
+    exception:
+      rationale: >
+        Unlike its 3 sibling app repos (default dev), ModelDeck's live default branch is
+        deliberately main -- documented in ModelDeck/CLAUDE.md: the HA add-on store reads
+        the add-on manifest from the default branch, and GitHub Actions `schedule:`
+        triggers always evaluate the workflow file version on the default branch, never
+        dev's copy. Re-verified live 2026-07-14 (gh repo view): confirmed main, matches
+        the documented rationale -- not drift.
+      owner: automationnexus-app-maintainers
+      review_trigger: HA add-on discovery mechanism changes, or ModelDeck drops its add-on
+        channels and becomes a pure Python service.
     notes: >
-      architect exists locally but was missing from the repo's visible routing table.
-      GitHub reports the live default branch as main though the documented flow targets
-      dev -- unresolved, see organogram.md open items. .claude/settings.json was missing
-      a Bash(git push origin dev:*) deny.
+      architect existed locally but was missing from the repo's visible routing table --
+      fixed (ModelDeck PR #107). .claude/settings.json already carries the
+      Bash(git push origin dev:*) / Bash(git push origin main:*) denies -- re-verified live
+      2026-07-14, no action needed (was already fixed by the time this was re-checked).
 
   - repo: Uploadarr
     class: full
@@ -362,8 +374,12 @@ repositories:
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
-    notes: "Canonical group D includes /execute; live repo did not -- policy decision pending, see organogram.md open items."
+    state: active
+    notes: >
+      Re-verified live 2026-07-14: template-infra-main-only's .claude/commands (execute,
+      prepush, qa) and .claude/agents (qa-gatekeeper) match the canonical D-infra-main-only
+      bundle exactly. No drift -- the earlier "canonical includes /execute, live may not"
+      concern did not hold up; policy question resolved as conformant.
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform

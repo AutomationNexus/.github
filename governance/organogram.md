@@ -43,8 +43,8 @@ platform-engineer  release-manager  template-steward  org-inspector
                       required)
       |
       v
- .github meta-repo team (workflow-engineer, + architect/security-auditor
- once added — see "Open items" below)
+ .github meta-repo team (architect, workflow-engineer, reviewer,
+ security-auditor, qa-gatekeeper — full roster present)
 
 Every full/config-only repo (independently, not a child of any org agent):
  architect -> {domain engineers} -> reviewer -> security-auditor -> qa-gatekeeper
@@ -114,31 +114,41 @@ HomeAssistant's `live-inspector`/`drift-sync`/`release-operator` +
 | Workspace root refresh | `platform-engineer` | `/sync-workspace` (human-confirmed) |
 | New repo | `chief-architect` | `/new-repo` (human-confirmed) |
 
-## Open items (not yet corrected — tracked here, fixed in later PRs per the rollout order)
+## Open items
 
-These are known, registered defects/decisions — not silent gaps. Each is also
-noted on its repo's `notes:` field in `registry.yml`. None is fixed in this
-PR; fixing another repo's files is out of scope for the canonical `.github`
-PR per the plan's staged rollout order (Section 7).
+### Resolved
 
-1. **`.github` meta-repo team** — `architect` and `security-auditor` are not
-   yet added locally (this PR's Task #4 fixes this one, since it's within
-   `.github` itself).
-2. **CognitiveSystems** — `CLAUDE.md` routes to a nonexistent `/pr` command.
-   Fix: either add a real `pr.md` with an assigned owner, or repoint the
-   pipeline text at a valid existing action. Deferred to a CognitiveSystems
-   feature-branch PR.
-3. **ModelDeck routing table** — the `architect` agent exists locally but is
-   missing from the visible subagent/routing table in `ModelDeck/CLAUDE.md`.
-   Deferred to a ModelDeck feature-branch PR.
-4. **ModelDeck default branch** — documented flow targets `dev`; live GitHub
-   reportedly shows `main` as default. Needs a live re-check; resolve by
-   either changing the default to `dev` or recording a deliberate exception
-   with rationale.
-5. **ModelDeck `.claude/settings.json`** — missing a
-   `Bash(git push origin dev:*)` deny present in the shared baseline.
-   Deferred to a ModelDeck feature-branch PR.
-6. **Template group D (`template-infra-main-only`)** — canonical group D
-   includes `/execute`; the live repo may not. Needs a policy decision:
-   either the live repo should match the rendered canonical bundle, or its
-   narrower command set is a registered exception.
+1. **`.github` meta-repo team** — `architect` and `security-auditor` are
+   present in `.claude/agents/` alongside `workflow-engineer`, `reviewer`,
+   `qa-gatekeeper`. Full roster confirmed live 2026-07-14.
+2. **CognitiveSystems** — `CLAUDE.md` routed to a nonexistent `/pr` command.
+   Fixed: pipeline text repointed at the real `/prepush` command, and the
+   ambiguous "first four agents" wording replaced with "four core roles".
+   Landed as CognitiveSystems PR #56.
+3. **ModelDeck routing table** — the `architect` agent existed locally but
+   was missing from the visible subagent/routing table in
+   `ModelDeck/CLAUDE.md`. Fixed: added to the routing table and the
+   Subagents table. Landed as ModelDeck PR #107.
+4. **ModelDeck default branch** — re-checked live 2026-07-14: `main`, which
+   matches `ModelDeck/CLAUDE.md`'s own documented rationale (HA add-on store
+   and `schedule:` triggers both read the default branch). Not drift —
+   recorded as a registered exception in `registry.yml` (see the `ModelDeck`
+   entry's `exception:` block) rather than something to change.
+5. **ModelDeck `.claude/settings.json`** — re-checked live 2026-07-14:
+   already carries both `Bash(git push origin dev:*)` and
+   `Bash(git push origin main:*)` denies. Already fixed by the time this was
+   re-verified — no further action needed.
+6. **Template group D (`template-infra-main-only`)** — re-checked live
+   2026-07-14: `.claude/commands/` (`execute`, `prepush`, `qa`) and
+   `.claude/agents/` (`qa-gatekeeper`) match the canonical
+   `templates/D-infra-main-only/` bundle exactly. No drift, no policy
+   decision needed.
+
+### Still open
+
+None outstanding from the initial audit. Remaining work (validator `--live`
+scope extension, `risk_tracks` enforcement, collision-protocol doc text,
+orchestration-package validator checks, scenario fixtures, stale
+model-tier prose cleanup, full 12-repo conformance record, and the
+human-confirmed rollout items in plan Sections 5/6/7) is tracked as ongoing
+implementation work, not as defects found by the audit.
