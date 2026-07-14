@@ -10,15 +10,14 @@ These are the only entities holding real GitHub permissions.
 
 | Team | Default repo permission | Purpose | State |
 |---|---|---|---|
-| `automationnexus-admins` | admin | Org ownership, billing, ruleset/security-setting changes, final escalation | desired |
-| `automationnexus-platform` | maintain | Owns `.github` — reusable workflows, templates, scripts, rulesets, this registry | desired |
-| `automationnexus-security` | triage | Security-sensitive paths org-wide — workflows, permissions, secrets hygiene, denylists | desired |
-| `automationnexus-release` | write | Promote/release paths — dispatch triggers, release workflows, tag/version policy | desired |
-| `automationnexus-app-maintainers` | write | Application/config source for the versioned app repos and HomeAssistant config | desired |
+| `automationnexus-admins` | admin | Org ownership, billing, ruleset/security-setting changes, final escalation | active |
+| `automationnexus-platform` | maintain | Owns `.github` — reusable workflows, templates, scripts, rulesets, this registry | active |
+| `automationnexus-security` | triage | Security-sensitive paths org-wide — workflows, permissions, secrets hygiene, denylists | active |
+| `automationnexus-release` | write | Promote/release paths — dispatch triggers, release workflows, tag/version policy | active |
+| `automationnexus-app-maintainers` | write | Application/config source for the versioned app repos and HomeAssistant config | active |
 
-All five are `state: desired` — none has been confirmed to exist live yet.
-See plan Section 6 (deferred to a separately-confirmed privileged rollout,
-not this PR).
+All five were created and verified live 2026-07-14 (`gh api
+orgs/AutomationNexus/teams`) — see "Resolved" item #10 below.
 
 ## AI rank chain
 
@@ -68,11 +67,11 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 | Repo | Class | Default branch | Team policy | Sync role | Owning team | State |
 |---|---|---|---|---|---|---|
 | `.github` | meta | `master` | meta-core | canonical-source | automationnexus-platform | active |
-| `CognitiveSystems` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
-| `MediaRefinery` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
-| `ModelDeck` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
-| `Uploadarr` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
-| `HomeAssistant` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
+| `CognitiveSystems` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
+| `MediaRefinery` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
+| `ModelDeck` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | exception |
+| `Uploadarr` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
+| `HomeAssistant` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
 | `ARCRunner` | minimal | `main` | minimal | excluded | automationnexus-platform | exception |
 | `template-python-docker` | template (A) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-python-pypi` | template (B) | `main` | full-core | template-target | automationnexus-platform | active |
@@ -80,11 +79,10 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 | `template-infra-main-only` | template (D) | `main` | stub | template-target | automationnexus-platform | active |
 | `template-ha-config` | template (E) | `main` | full-core | template-target | automationnexus-platform | active |
 
-`needs-verification` here specifically means: default branch, team
-composition, and ruleset application have not been re-checked live since this
-registry was authored — not that anything is known to be wrong. `ARCRunner`
-is the one row genuinely settled as `exception` (documented, reviewed, not
-pending a check).
+Every row above is now `active`, confirmed live, except the two documented,
+permanent exceptions: `ModelDeck` (default branch `main`, not `dev` — see
+its `registry.yml` `exception:` block) and `ARCRunner` (minimal single-image
+build, no full team justified).
 
 ## Repo-core team (every `full-core`/`meta-core` repo)
 
@@ -190,7 +188,7 @@ repo's sibling clone (see "Resolved" #7 below).
    chain instead of repeating the error.
 10. **Human GitHub team creation, org-team-based CODEOWNERS rollout, and live
     ruleset/security-setting changes (plan Sections 5/6/7), human-confirmed
-    2026-07-14.** All 5 org teams created (`automationnexus-owners`,
+    2026-07-14.** All 5 org teams created (`automationnexus-admins`,
     `automationnexus-platform`, `automationnexus-security`,
     `automationnexus-release`, `automationnexus-app-maintainers`) with
     per-repo permissions assigned per this file's matrix; org-team-based

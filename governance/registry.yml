@@ -28,27 +28,27 @@ human_teams:
   - slug: automationnexus-admins
     purpose: Org ownership, billing, ruleset/security-setting changes, final escalation.
     default_repo_permission: admin
-    state: desired
+    state: active
 
   - slug: automationnexus-platform
     purpose: Owns automationnexus/.github -- reusable workflows, templates, scripts, rulesets, this registry.
     default_repo_permission: maintain
-    state: desired
+    state: active
 
   - slug: automationnexus-security
     purpose: Security-sensitive paths across every repo -- workflows, permissions, secrets hygiene, denylists.
     default_repo_permission: triage
-    state: desired
+    state: active
 
   - slug: automationnexus-release
     purpose: Promote/release paths -- promote-dev-to-main triggers, release workflows, tag/version policy.
     default_repo_permission: write
-    state: desired
+    state: active
 
   - slug: automationnexus-app-maintainers
     purpose: Application/config source for the versioned app repos and HomeAssistant config.
     default_repo_permission: write
-    state: desired
+    state: active
 
 # -----------------------------------------------------------------------------
 # Org-tier AI agents ("CTO desk"). Load ONLY in a Claude Code session opened at the
@@ -254,7 +254,7 @@ repositories:
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
-    state: needs-verification
+    state: active
     notes: "CLAUDE.md's /pr routing defect fixed (CognitiveSystems PR #56, 2026-07-14)."
 
   - repo: MediaRefinery
@@ -266,7 +266,7 @@ repositories:
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
-    state: needs-verification
+    state: active
     notes: >
       domain_agents corrected 2026-07-14: registry previously listed none, but
       .claude/agents/ and CLAUDE.md's Subagents table both document backend-engineer
@@ -313,7 +313,7 @@ repositories:
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
-    state: needs-verification
+    state: active
     notes: >
       domain_agents corrected 2026-07-14: registry previously listed none, but
       .claude/agents/ and CLAUDE.md's Subagents table both document tracker-engineer
@@ -331,7 +331,7 @@ repositories:
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
-    state: needs-verification
+    state: active
     notes: >
       domain_agents corrected 2026-07-14: yaml-engineer (HA YAML/packages/blueprints/
       dashboards/helpers) was present in .claude/agents/ and CLAUDE.md's Subagents
