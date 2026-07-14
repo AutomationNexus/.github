@@ -8,6 +8,19 @@ management of its own and cannot assume it is present -- do not make it a hard r
 Usage:
     python scripts/validate-governance.py [--live] [--workspace-root PATH]
 
+Always runs (no live GitHub calls): registry schema/cross-reference checks, agent/command
+file discovery vs registration, mutation-class-vs-tool-grant checks, sibling repo-core team
+presence, and each full-core/meta-core repo's .claude/settings.json deny list against the
+templates/_shared/.claude/settings.json.template baseline.
+
+--live additionally queries GitHub for: default branch, repo security settings (secret
+scanning/push protection/Dependabot) and rulesets (public repos only -- GitHub Free has no
+ruleset support on private repos), human team existence, CODEOWNERS team-slug references,
+label-API reachability, and org Projects v2. Findings about state described in the plan as
+not-yet-rolled-out (Sections 5/6) are WARN, never ERROR -- this mode is reporting-only until
+that rollout happens; auth/scope failures are also WARN ("permission-limited"), never treated
+as a failed check.
+
 Exit code is nonzero if any ERROR-level finding was reported. WARN-level findings (mostly
 needs-verification/permission-limited/missing-sibling-clone cases) are reported but do not
 fail the run.
@@ -44,6 +57,7 @@ ORGANOGRAM_PATH = GOVERNANCE_DIR / "organogram.md"
 VERIFICATION_STATES = {"active", "desired", "exception", "needs-verification", "permission-limited"}
 AUTHORITY_CLASSES = {"read-only", "repo-write", "cross-repo-write", "admin-state", "human-confirmation-required"}
 MUTATING_TOOLS = {"Edit", "Write", "NotebookEdit"}
+RISK_TRACKS = {"A", "B", "C", "D"}
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?", re.DOTALL)
 
@@ -241,6 +255,16 @@ def check_repo_core_commands(registry: Any, report: Report) -> set[str]:
             names.add(name)
         if command.get("confirmation_class") not in AUTHORITY_CLASSES:
             report.error("repo_core_commands", f"{name}: invalid confirmation_class '{command.get('confirmation_class')}'")
+        if "risk_tracks" in command:
+            tracks = command.get("risk_tracks")
+            if not isinstance(tracks, list) or not tracks:
+                report.error("repo_core_commands", f"{name}: risk_tracks must be a non-empty list when present")
+                continue
+            invalid = [t for t in tracks if t not in RISK_TRACKS]
+            if invalid:
+                report.error("repo_core_commands", f"{name}: risk_tracks contains invalid entry(s) {invalid}, expected a subset of {sorted(RISK_TRACKS)}")
+            if len(set(tracks)) != len(tracks):
+                report.error("repo_core_commands", f"{name}: risk_tracks has duplicate entries {tracks}")
     return names
 
 
@@ -376,6 +400,48 @@ def check_organogram_coverage(org_agents: dict[str, Any], repo_core_team: dict[s
 # Cross-repo checks (best-effort: sibling clones may not exist, e.g. in CI)
 # ---------------------------------------------------------------------------
 
+def load_settings_deny(path: Path) -> set[str] | None:
+    if not path.is_file():
+        return None
+    try:
+        data = load_json(path)
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    deny = ((data.get("permissions") or {}).get("deny")) or []
+    return {str(d) for d in deny}
+
+
+def check_settings_denylist(repos: dict[str, dict[str, Any]], workspace_root: Path, report: Report) -> None:
+    """Compare each full-core/meta-core repo's actual .claude/settings.json deny list against
+    the mandatory baseline in templates/_shared/.claude/settings.json.template. Repos may add
+    domain-specific secret-path denies on top -- only a MISSING baseline entry is a finding
+    (this is how ModelDeck's now-fixed missing push-deny would have been caught automatically)."""
+    baseline = load_settings_deny(REPO_ROOT / "templates" / "_shared" / ".claude" / "settings.json.template")
+    if baseline is None:
+        report.warn("settings-denylist", "could not load templates/_shared/.claude/settings.json.template -- skipped")
+        return
+    for name, repo in repos.items():
+        if repo.get("team_policy") not in {"full-core", "meta-core"}:
+            continue
+        if name == ".github":
+            settings_path = REPO_ROOT / ".claude" / "settings.json"
+        else:
+            sibling = workspace_root / name
+            if not sibling.is_dir():
+                report.warn("settings-denylist", f"{name}: sibling clone not found under {workspace_root} -- skipped local denylist check")
+                continue
+            settings_path = sibling / ".claude" / "settings.json"
+        actual = load_settings_deny(settings_path)
+        if actual is None:
+            report.error("settings-denylist", f"{name}: {settings_path} missing or unparseable")
+            continue
+        missing = baseline - actual
+        if missing:
+            report.error("settings-denylist", f"{name}: .claude/settings.json is missing mandatory baseline deny(s) {sorted(missing)}")
+
+
 def check_sibling_repo_teams(repos: dict[str, dict[str, Any]], repo_core_team: dict[str, Any], workspace_root: Path, report: Report) -> None:
     for name, repo in repos.items():
         if repo.get("team_policy") not in {"full-core", "meta-core"}:
@@ -409,6 +475,35 @@ def gh_default_branch(repo: str) -> str | None:
     return result.stdout.strip() or None
 
 
+def gh_api(path: str) -> tuple[Any | None, int | None, str | None]:
+    """Best-effort GET against the GitHub API via gh. Returns (data, http_status, error_text).
+
+    data is None on any failure. http_status is parsed from gh's error text when available
+    (e.g. 404 = does not exist yet, 403 = permission-limited) so callers can tell "not rolled
+    out yet" apart from "couldn't check" without guessing from message text.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "api", path], check=True, text=True, capture_output=True, timeout=30,
+        )
+    except FileNotFoundError:
+        return None, None, "gh CLI not found"
+    except subprocess.TimeoutExpired:
+        return None, None, "timed out"
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        match = re.search(r"HTTP (\d\d\d)", stderr)
+        status = int(match.group(1)) if match else None
+        return None, status, stderr or f"gh api {path} failed"
+    text = result.stdout.strip()
+    if not text:
+        return None, 200, None
+    try:
+        return json.loads(text), 200, None
+    except json.JSONDecodeError:
+        return text, 200, None
+
+
 def check_live(repos: dict[str, dict[str, Any]], report: Report) -> None:
     for name, repo in repos.items():
         live_branch = gh_default_branch(name)
@@ -418,6 +513,104 @@ def check_live(repos: dict[str, dict[str, Any]], report: Report) -> None:
         expected = repo.get("default_branch")
         if live_branch != expected:
             report.error("live", f"{name}: registry says default_branch='{expected}', GitHub reports '{live_branch}'")
+
+
+def check_live_security_and_rulesets(repos: dict[str, dict[str, Any]], report: Report) -> None:
+    """Plan Section 6 (secret scanning/push protection/rulesets) is a separately-confirmed
+    privileged rollout, not yet performed -- findings here are reporting-only (WARN), never
+    ERROR, until that rollout happens. Rulesets are checked only for public repos: GitHub Free
+    has no branch-protection/ruleset support on private repos (see rulesets/README.md) -- those
+    rely on CI guards + auto-revert instead, so absence there is not a finding at all."""
+    for name in repos:
+        data, status, err = gh_api(f"repos/AutomationNexus/{name}")
+        if data is None or not isinstance(data, dict):
+            report.warn("live-security", f"{name}: could not query repo metadata ({err or status or 'unknown error'}) -- permission-limited")
+            continue
+        visibility = data.get("visibility")
+        sec = data.get("security_and_analysis") or {}
+        if visibility == "public":
+            wanted = ("secret_scanning", "secret_scanning_push_protection", "dependabot_security_updates")
+            disabled = [k for k in wanted if ((sec.get(k) or {}).get("status")) != "enabled"]
+            if disabled:
+                report.warn("live-security", f"{name}: public repo, security feature(s) not yet enabled: {sorted(disabled)} (plan Section 6 rollout not yet performed)")
+
+            rulesets, rstatus, rerr = gh_api(f"repos/AutomationNexus/{name}/rulesets")
+            if rulesets is None:
+                report.warn("live-rulesets", f"{name}: could not query rulesets ({rerr or rstatus or 'unknown error'}) -- permission-limited")
+            elif isinstance(rulesets, list) and not rulesets:
+                report.warn("live-rulesets", f"{name}: public repo has no rulesets applied yet (plan Section 6/7 rollout not yet performed)")
+
+
+def check_live_teams(human_team_slugs: set[str], report: Report) -> None:
+    for slug in sorted(human_team_slugs):
+        data, status, err = gh_api(f"orgs/AutomationNexus/teams/{slug}")
+        if data is not None:
+            report.warn("live-teams", f"{slug}: exists live -- once membership/permissions are verified, update its registry.yml state from 'desired' to 'active'")
+        elif status == 404:
+            report.warn("live-teams", f"{slug}: does not exist live yet (registry state is 'desired' -- expected pending plan Section 5 rollout)")
+        else:
+            report.warn("live-teams", f"{slug}: could not query ({err or 'unknown error'}) -- permission-limited")
+
+
+def check_live_codeowners(repos: dict[str, dict[str, Any]], human_team_slugs: set[str], report: Report) -> None:
+    import base64
+
+    for name, repo in repos.items():
+        branch = repo.get("default_branch", "main")
+        data, status, err = gh_api(f"repos/AutomationNexus/{name}/contents/.github/CODEOWNERS?ref={branch}")
+        if data is None:
+            if status == 404:
+                report.warn("live-codeowners", f"{name}: no CODEOWNERS file yet on '{branch}' (plan Section 5 rollout not yet performed)")
+            else:
+                report.warn("live-codeowners", f"{name}: could not query CODEOWNERS ({err or 'unknown error'}) -- permission-limited")
+            continue
+        if not isinstance(data, dict) or "content" not in data:
+            report.warn("live-codeowners", f"{name}: CODEOWNERS content response was not in the expected shape -- skipped")
+            continue
+        try:
+            text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+        except (ValueError, TypeError):
+            report.warn("live-codeowners", f"{name}: CODEOWNERS present but could not decode content")
+            continue
+        referenced = set(re.findall(r"@AutomationNexus/([\w-]+)", text))
+        unknown = referenced - human_team_slugs
+        if unknown:
+            report.error("live-codeowners", f"{name}: CODEOWNERS references unknown team slug(s) {sorted(unknown)}")
+
+
+def check_live_labels(repos: dict[str, dict[str, Any]], report: Report) -> None:
+    """No canonical label taxonomy is registered in registry.yml yet (plan Section 5 describes
+    one as future work) -- this only confirms the labels API is reachable per repo so a future
+    taxonomy check has something to validate against. Reachability failures are permission-
+    limited; there is nothing to assert about label content until a taxonomy is registered."""
+    for name in repos:
+        data, status, err = gh_api(f"repos/AutomationNexus/{name}/labels")
+        if data is None:
+            report.warn("live-labels", f"{name}: could not query labels ({err or status or 'unknown error'}) -- permission-limited")
+
+
+def check_live_projects(report: Report) -> None:
+    query = 'query=query { organization(login: "AutomationNexus") { projectsV2(first: 20) { nodes { title } } } }'
+    try:
+        result = subprocess.run(
+            ["gh", "api", "graphql", "-f", query], text=True, capture_output=True, timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        report.warn("live-projects", f"could not query org Projects v2 ({exc}) -- permission-limited")
+        return
+    raw = result.stdout.strip() or result.stderr.strip()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        report.warn("live-projects", "could not query org Projects v2 (unparseable response) -- permission-limited")
+        return
+    if isinstance(data, dict) and data.get("errors"):
+        messages = "; ".join(str(e.get("message", e)) for e in data["errors"])
+        report.warn("live-projects", f"org Projects v2 not queryable: {messages} -- permission-limited")
+        return
+    nodes = (((data.get("data") or {}).get("organization") or {}).get("projectsV2") or {}).get("nodes", [])
+    if not nodes:
+        report.warn("live-projects", "no org Projects v2 boards found yet (plan Section 5 desired boards not yet created)")
 
 
 # ---------------------------------------------------------------------------
@@ -466,9 +659,15 @@ def main() -> int:
 
     check_organogram_coverage(org_agents, repo_core_team, report)
     check_sibling_repo_teams(repos, repo_core_team, args.workspace_root, report)
+    check_settings_denylist(repos, args.workspace_root, report)
 
     if args.live:
         check_live(repos, report)
+        check_live_security_and_rulesets(repos, report)
+        check_live_teams(human_teams, report)
+        check_live_codeowners(repos, human_teams, report)
+        check_live_labels(repos, report)
+        check_live_projects(report)
 
     print(report.render())
     return 1 if report.has_errors else 0
