@@ -98,8 +98,13 @@ pending a check).
 Repo-local additions (`domain_agents`, `extra_qa_gates`, `extra_orchestration`
 in `registry.yml`) are registered orchestration profiles, not defects: e.g.
 ModelDeck's `mqtt-engineer`/`addon-engineer` + `addon-qa-gatekeeper`,
-HomeAssistant's `live-inspector`/`drift-sync`/`release-operator` +
-`dry-run-deploy`.
+HomeAssistant's `yaml-engineer`/`live-inspector`/`drift-sync`/`release-operator`
++ `dry-run-deploy` (the last of these names the `/deploy-dry-run` command, not
+an agent file -- `extra_orchestration` entries are not required to resolve to
+a `.claude/agents/*.md` file the way `domain_agents`/`extra_qa_gates` are).
+`scripts/validate-governance.py` now checks every full-core/meta-core repo's
+`domain_agents` + `extra_qa_gates` against what's actually on disk in that
+repo's sibling clone (see "Resolved" #7 below).
 
 ## Task routing (org-tier)
 

@@ -193,14 +193,26 @@ repo_core_team:
 
 repo_core_commands:
   - name: /execute
+    owner: main-session
     confirmation_class: repo-write
+    entry_conditions: Any code change in this repo, from a one-file trivial fix through a multi-domain feature.
+    outputs: [risk-track-classification, pr]
     risk_tracks: [A, B, C]
   - name: /qa
+    owner: qa-gatekeeper
     confirmation_class: read-only
+    entry_conditions: Local QA gate needed before PR, or as the final gate an /execute pass runs after review/security fixes.
+    outputs: [pass-fail-report]
   - name: /prepush
+    owner: qa-gatekeeper
     confirmation_class: read-only
+    entry_conditions: A feature branch is about to be pushed; readiness check before push.
+    outputs: [pass-fail-report]
   - name: /release
+    owner: main-session
     confirmation_class: human-confirmation-required
+    entry_conditions: dev CI is green and a promote/release to main is being considered.
+    outputs: [gate-by-gate-status]
     risk_tracks: [D]
 
 # -----------------------------------------------------------------------------
@@ -246,11 +258,17 @@ repositories:
     default_branch: dev
     branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main -> release.yml"
     team_policy: full-core
-    domain_agents: []
+    domain_agents: [backend-engineer, frontend-engineer]
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
     state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: registry previously listed none, but
+      .claude/agents/ and CLAUDE.md's Subagents table both document backend-engineer
+      (src/mediarefinery/ FastAPI/Immich/ONNX/OCR pipeline) and frontend-engineer
+      (frontend/ React dashboard) as real, routed domain agents. Registry data was
+      simply never recorded, not a repo-side defect.
 
   - repo: ModelDeck
     class: full
@@ -287,23 +305,36 @@ repositories:
     default_branch: dev
     branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main -> release.yml"
     team_policy: full-core
-    domain_agents: []
+    domain_agents: [tracker-engineer, frontend-engineer]
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
     state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: registry previously listed none, but
+      .claude/agents/ and CLAUDE.md's Subagents table both document tracker-engineer
+      (Python backend, tracker automation, upload pipeline) and frontend-engineer
+      (React dashboard) as real, routed domain agents. Registry data was simply never
+      recorded, not a repo-side defect.
 
   - repo: HomeAssistant
     class: config-only
     default_branch: dev
     branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main (no version bump; no pyproject.toml)"
     team_policy: full-core
-    domain_agents: [live-inspector, drift-sync, release-operator]
+    domain_agents: [yaml-engineer, live-inspector, drift-sync, release-operator]
     extra_orchestration: [dry-run-deploy]
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
     state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: yaml-engineer (HA YAML/packages/blueprints/
+      dashboards/helpers) was present in .claude/agents/ and CLAUDE.md's Subagents
+      table but missing from the registry -- added. extra_orchestration's
+      dry-run-deploy is not an agent file; it names the /deploy-dry-run command
+      (dispatches release-operator for a deploy preflight), confirmed intentional,
+      not drift.
 
   - repo: ARCRunner
     class: minimal

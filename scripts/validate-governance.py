@@ -246,13 +246,19 @@ def check_repo_core_team(registry: Any, report: Report) -> dict[str, dict[str, A
     return team
 
 
-def check_repo_core_commands(registry: Any, report: Report) -> set[str]:
+def check_repo_core_commands(registry: Any, repo_core_team: dict[str, Any], report: Report) -> set[str]:
     names: set[str] = set()
+    # "main-session" is a documented sentinel (workspace/CLAUDE.md, templates/_shared/CLAUDE.md.template,
+    # execute.md/release.md): /execute and /release are orchestrated by the main repo session across
+    # multiple core roles depending on risk track, not owned by any single repo_core_team member.
+    valid_owners = set(repo_core_team) | {"main-session"}
     for command in registry.get("repo_core_commands", []):
         name = command.get("name")
-        require_keys(command, ["name", "confirmation_class"], "repo_core_commands", str(name or "<unnamed>"), report)
+        require_keys(command, ["name", "owner", "confirmation_class", "entry_conditions", "outputs"], "repo_core_commands", str(name or "<unnamed>"), report)
         if name:
             names.add(name)
+        if command.get("owner") not in valid_owners:
+            report.error("repo_core_commands", f"{name}: owner '{command.get('owner')}' is not a known repo-core role or 'main-session'")
         if command.get("confirmation_class") not in AUTHORITY_CLASSES:
             report.error("repo_core_commands", f"{name}: invalid confirmation_class '{command.get('confirmation_class')}'")
         if "risk_tracks" in command:
@@ -302,6 +308,8 @@ def check_repositories(registry: Any, human_teams: set[str], report: Report) -> 
         exception = repo.get("exception")
         if exception:
             require_keys(exception, ["rationale", "owner", "review_trigger"], "repositories", f"{name}.exception", report)
+        if repo.get("class") == "full" and not repo.get("domain_agents") and repo.get("state") != "exception":
+            report.error("repositories", f"{name}: class 'full' requires at least one domain agent; domain_agents is empty and no exception is registered")
     return repos
 
 
@@ -458,6 +466,117 @@ def check_sibling_repo_teams(repos: dict[str, dict[str, Any]], repo_core_team: d
         missing = repo_core_team.keys() - on_disk.keys()
         if missing:
             report.error("repositories", f"{name}: missing core role file(s) {sorted(missing)} under {agents_dir}")
+
+
+def check_sibling_repo_domain_agents(repos: dict[str, dict[str, Any]], repo_core_team: dict[str, Any], workspace_root: Path, report: Report) -> None:
+    """Compare each full-core/meta-core repo's registered domain_agents + extra_qa_gates
+    against the domain-specific agent files actually on disk (agent files beyond the 4 shared
+    core roles). This is what would have caught MediaRefinery/Uploadarr shipping real domain
+    engineers with an empty registered domain_agents: [], and HomeAssistant's yaml-engineer
+    file going unregistered.
+
+    extra_orchestration is deliberately excluded from this comparison: it can name a process
+    or command rather than an agent file -- e.g. HomeAssistant's dry-run-deploy refers to the
+    /deploy-dry-run command (which dispatches release-operator), not a .claude/agents/*.md
+    file -- so it is not comparable to disk the same way domain_agents/extra_qa_gates are."""
+    for name, repo in repos.items():
+        if repo.get("team_policy") not in {"full-core", "meta-core"}:
+            continue
+        if name == ".github":
+            agents_dir = REPO_ROOT / ".claude" / "agents"
+        else:
+            sibling = workspace_root / name
+            if not sibling.is_dir():
+                report.warn("repositories", f"{name}: sibling clone not found under {workspace_root} -- skipped domain-agent check")
+                continue
+            agents_dir = sibling / ".claude" / "agents"
+        on_disk = discover_agents(agents_dir)
+        domain_on_disk = on_disk.keys() - repo_core_team.keys()
+        registered = set(repo.get("domain_agents") or []) | set(repo.get("extra_qa_gates") or [])
+        missing = registered - domain_on_disk
+        unregistered = domain_on_disk - registered
+        for n in sorted(missing):
+            report.error("repositories", f"{name}: registered domain agent '{n}' has no file under {agents_dir}")
+        for n in sorted(unregistered):
+            report.warn("repositories", f"{name}: file {agents_dir / (n + '.md')} is not registered in domain_agents/extra_qa_gates")
+
+
+def check_command_content_invariants(report: Report) -> None:
+    """Machine-verify orchestration properties that are only ever asserted in hand-authored
+    prose: the shared /execute command must actually contain the mandatory security-auditor
+    trigger and the rerun-after-fix rule, and /dispatch must actually name both the handoff
+    and handback packets and state that repo-tier agents are not directly available at the
+    org root. This catches a future edit that silently drops one of these properties from the
+    command file even though the registry still claims the behavior exists."""
+    checks = [
+        (
+            REPO_ROOT / "templates" / "_shared" / ".claude" / "commands" / "execute.md",
+            [
+                "security-auditor",
+                "rerun the QA gate",
+                "Stop and report on the first failed gate",
+            ],
+        ),
+        (
+            REPO_ROOT / "templates" / "_shared" / "CLAUDE.md.template",
+            [
+                "never a local fork",
+            ],
+        ),
+        (
+            REPO_ROOT / "workspace" / ".claude" / "commands" / "dispatch.md",
+            [
+                "Handoff packet (org → repo)",
+                "Handback packet (repo → org)",
+                "repo-tier agents only load there",
+            ],
+        ),
+    ]
+    for path, phrases in checks:
+        if not path.is_file():
+            report.error("command-content", f"{path.relative_to(REPO_ROOT)} does not exist")
+            continue
+        text = path.read_text(encoding="utf-8")
+        for phrase in phrases:
+            if phrase not in text:
+                report.error("command-content", f"{path.relative_to(REPO_ROOT)}: missing required phrase {phrase!r}")
+
+
+def check_workspace_sync_drift(workspace_root: Path, report: Report) -> None:
+    """Compare the canonical workspace/ layer here against its generated copy at the org
+    workspace root -- the same comparison scripts/sync-workspace.sh --check performs (reused
+    logic and the same "managed files" definition, not a second sync mechanism; this only
+    reads, it never writes -- the actual copy remains that script's job, run separately with
+    human confirmation). Only meaningful from a full org workspace checkout; an isolated
+    .github-only clone (most CI runs) has no root copy to compare against, which is WARN, not
+    a failure of this check. Drift itself is also WARN, not ERROR: refreshing the root copy is
+    a separate, human-confirmed sync-workspace.sh run, so this reports pending-rollout state
+    like the other not-yet-synced findings in this script."""
+    src = REPO_ROOT / "workspace"
+    sentinel_repos = ["CognitiveSystems", "MediaRefinery", "ModelDeck", "Uploadarr"]
+    if not all((workspace_root / r).is_dir() for r in sentinel_repos):
+        report.warn("workspace-sync", "no full org workspace checkout found (sibling repo clones absent) -- skipped, expected in an isolated .github-only clone")
+        return
+    managed = [
+        p for p in src.rglob("*")
+        if p.is_file() and p.name != "README.md" and ".backups" not in p.relative_to(src).parts
+    ]
+    drifted: list[str] = []
+    missing: list[str] = []
+    for path in managed:
+        rel = path.relative_to(src)
+        dest = workspace_root / rel
+        if not dest.is_file():
+            missing.append(str(rel))
+        elif path.read_bytes() != dest.read_bytes():
+            drifted.append(str(rel))
+    if drifted or missing:
+        detail = []
+        if drifted:
+            detail.append(f"drifted: {sorted(drifted)}")
+        if missing:
+            detail.append(f"missing at root: {sorted(missing)}")
+        report.warn("workspace-sync", f"generated workspace root is out of sync with canonical workspace/ ({'; '.join(detail)}) -- run scripts/sync-workspace.sh to refresh (human-confirmed)")
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +759,7 @@ def main() -> int:
     org_agents = check_org_agents(registry, report)
     org_command_names = check_org_commands(registry, org_agents, report)
     repo_core_team = check_repo_core_team(registry, report)
-    repo_core_command_names = check_repo_core_commands(registry, report)
+    repo_core_command_names = check_repo_core_commands(registry, repo_core_team, report)
     check_authority_classes(registry, report)
     repos = check_repositories(registry, human_teams, report)
     check_exceptions(registry, human_teams, report)
@@ -659,7 +778,10 @@ def main() -> int:
 
     check_organogram_coverage(org_agents, repo_core_team, report)
     check_sibling_repo_teams(repos, repo_core_team, args.workspace_root, report)
+    check_sibling_repo_domain_agents(repos, repo_core_team, args.workspace_root, report)
     check_settings_denylist(repos, args.workspace_root, report)
+    check_command_content_invariants(report)
+    check_workspace_sync_drift(args.workspace_root, report)
 
     if args.live:
         check_live(repos, report)

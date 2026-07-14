@@ -111,10 +111,13 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "confirmation_class"],
+        "required": ["name", "owner", "confirmation_class", "entry_conditions", "outputs"],
         "properties": {
           "name": {"type": "string", "enum": ["/execute", "/qa", "/prepush", "/release"]},
+          "owner": {"type": "string", "minLength": 1},
           "confirmation_class": {"$ref": "#/$defs/confirmation_class"},
+          "entry_conditions": {"type": "string", "minLength": 1},
+          "outputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
           "risk_tracks": {"type": "array", "items": {"type": "string", "enum": ["A", "B", "C", "D"]}}
         },
         "additionalProperties": false
