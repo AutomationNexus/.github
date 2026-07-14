@@ -1,0 +1,5 @@
+# Governed by automationnexus/.github governance/registry.yml -- edit ownership there first.
+* @AutomationNexus/automationnexus-platform
+
+# Security-sensitive paths
+/.github/workflows/ @AutomationNexus/automationnexus-security
