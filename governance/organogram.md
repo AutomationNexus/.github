@@ -74,11 +74,11 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 | `Uploadarr` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
 | `HomeAssistant` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
 | `ARCRunner` | minimal | `main` | minimal | excluded | automationnexus-platform | exception |
-| `template-python-docker` | template (A) | `main` | stub | template-target | automationnexus-platform | needs-verification |
-| `template-python-pypi` | template (B) | `main` | stub | template-target | automationnexus-platform | needs-verification |
-| `template-docker-ha-addon` | template (C) | `main` | stub | template-target | automationnexus-platform | needs-verification |
-| `template-infra-main-only` | template (D) | `main` | stub | template-target | automationnexus-platform | needs-verification |
-| `template-ha-config` | template (E) | `main` | stub | template-target | automationnexus-platform | needs-verification |
+| `template-python-docker` | template (A) | `main` | full-core | template-target | automationnexus-platform | active |
+| `template-python-pypi` | template (B) | `main` | full-core | template-target | automationnexus-platform | active |
+| `template-docker-ha-addon` | template (C) | `main` | full-core | template-target | automationnexus-platform | active |
+| `template-infra-main-only` | template (D) | `main` | stub | template-target | automationnexus-platform | active |
+| `template-ha-config` | template (E) | `main` | full-core | template-target | automationnexus-platform | active |
 
 `needs-verification` here specifically means: default branch, team
 composition, and ruleset application have not been re-checked live since this
@@ -164,33 +164,42 @@ repo's sibling clone (see "Resolved" #7 below).
    `settings.json` branch-protection denies. Full record:
    [`conformance.md`](conformance.md). Result: 7 of 12 repos conformant or
    a confirmed exception (`.github`, CognitiveSystems, MediaRefinery,
-   ModelDeck, Uploadarr, HomeAssistant, ARCRunner); the 5 template repos are
-   confirmed out of sync with a canonical change (commit `39558a0`,
+   ModelDeck, Uploadarr, HomeAssistant, ARCRunner); the 5 template repos
+   were found out of sync with a canonical change (commit `39558a0`,
    2026-07-11) that added the full shared core to groups A/B/C/E and a new
-   `execute.md` to group D — none of it has reached the live repos yet.
-   One existing registry note (`template-infra-main-only` claiming
-   "re-verified, no drift") was found to be false and has been corrected.
-   `registry.yml` and `workspace/CLAUDE.md` (`pyproject.toml`/`bump-type`
-   phrasing) updated accordingly, 2026-07-14.
+   `execute.md` to group D. `registry.yml` and `workspace/CLAUDE.md`
+   (`pyproject.toml`/`bump-type` phrasing) updated accordingly, 2026-07-14.
+9. **`scripts/sync-workspace.sh --force` and `scripts/sync-templates.sh`
+   (all 5 groups), human-confirmed 2026-07-14.** Workspace root refreshed
+   (backup at `workspace/.backups/20260714T161034Z/`). Template sync pushed
+   real fixes to groups A/B/C/E (commits `abcc436`/`26d8524`/`513853a`/
+   `441b80c`) — `team_policy` promoted `stub` → `full-core` for those four,
+   their prior "starter repo, full team unjustified" exception blocks
+   removed since 39558a0 made the full core their standard rendered state.
+   Group D reported **already in sync** — its live `main` had actually been
+   correctly synced since 2026-07-11 (commit `d225ea2`, ~4 min after
+   `39558a0` landed). This means item #8's audit finding for group D, and
+   this file's own prior "CORRECTED" note about it, were both wrong: the
+   audit checked this repo's *local* clone in the workspace, which was 1
+   commit behind `origin/main` because nothing had fetched it — a direct
+   instance of the "never trust a stale local view" warning in
+   `workspace/CLAUDE.md`'s concurrent-agent protocol. Re-verified by
+   fetching `origin/main` directly before trusting either claim. All 5
+   local template-repo clones fast-forwarded to `origin/main` as part of
+   this fix. `registry.yml`'s group D note now documents this correction
+   chain instead of repeating the error.
 
 ### Still open
 
-Two items remain, both staged and human-gated — neither is a defect this
-audit can resolve on its own:
+One item remains, staged and human-gated:
 
-1. **A human-confirmed `scripts/sync-templates.sh` run** to close the
-   confirmed template-repo drift documented in `conformance.md` and in
-   each of the 5 template repos' `registry.yml` entries. This is the org's
-   one standing direct-push-to-`main` exception
-   (`exceptions: sync-templates-direct-push`) — always requires the human
-   to name the exact repos/options in the current turn before it runs. A
-   follow-up registry edit should also reconsider `team_policy: stub` for
-   groups A/B/C/E once their live state matches canonical (their canonical
-   is no longer a bare `qa-gatekeeper` stub).
-2. **The human-confirmed rollout items in plan Sections 5/6/7** — human
-   GitHub team creation, CODEOWNERS rollout beyond the 3 repos that have
-   any CODEOWNERS file today (CognitiveSystems and HomeAssistant use an
-   individual `@t-abraham` fallback per Section 5's sanctioned temporary
-   state; MediaRefinery's is inert/fully commented out; the other 9 repos
-   have no CODEOWNERS file at all), live ruleset/security-setting changes,
-   and `sync-shared-claude.sh`/`sync-workspace.sh` runs.
+1. **The human-confirmed rollout items in plan Sections 5/6/7** — human
+   GitHub team creation, CODEOWNERS rollout (now planned as
+   org-team-based per the repo owner's explicit correction — not the
+   individual-fallback pattern originally proposed — beyond the 3 repos
+   that have any CODEOWNERS file today: CognitiveSystems and HomeAssistant
+   use an individual `@t-abraham` fallback, MediaRefinery's is
+   inert/fully commented out; the other 9 repos have no CODEOWNERS file
+   at all), live ruleset/security-setting changes, and
+   `sync-shared-claude.sh` runs. `sync-workspace.sh` and
+   `sync-templates.sh` are done (see item #9).

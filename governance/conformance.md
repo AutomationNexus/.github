@@ -34,11 +34,11 @@ source of truth; this file is a snapshot, not a generator.
 | `Uploadarr` | full | full-core | conformant | `domain_agents` registry correction confirmed live. |
 | `HomeAssistant` | config-only | full-core | conformant | Full 8-role roster + `dry-run-deploy` orchestration entry confirmed live, exact match. |
 | `ARCRunner` | minimal | minimal | exception (confirmed) | Deliberately `qa-gatekeeper`-only; internally consistent with registry and its own `CLAUDE.md`. |
-| `template-python-docker` | template (A) | stub | needs-sync-decision | Live missing architect/reviewer/security-auditor + execute/release commands added to canonical 2026-07-11 (commit `39558a0`). |
-| `template-python-pypi` | template (B) | stub | needs-sync-decision | Same gap as group A. |
-| `template-docker-ha-addon` | template (C) | stub | needs-sync-decision | Same gap as group A. `pyproject.toml` presence is correct/expected, not drift. |
-| `template-infra-main-only` | template (D) | stub | defect (corrected) | Registry previously claimed "no drift, re-verified" -- false. Live is missing `execute.md`, added to canonical D bundle in the same commit. Registry note corrected 2026-07-14. |
-| `template-ha-config` | template (E) | stub | needs-sync-decision | Same gap as group A. `secrets.yaml`-aware settings.json overlay is correct/expected, not drift. |
+| `template-python-docker` | template (A) | full-core | conformant | Synced live 2026-07-14 (`scripts/sync-templates.sh`, commit `abcc436`). `team_policy` promoted stub -> full-core. |
+| `template-python-pypi` | template (B) | full-core | conformant | Synced live 2026-07-14 (commit `26d8524`). Same promotion. |
+| `template-docker-ha-addon` | template (C) | full-core | conformant | Synced live 2026-07-14 (commit `513853a`). Same promotion. `pyproject.toml` presence is correct/expected, unrelated to the sync. |
+| `template-infra-main-only` | template (D) | stub | conformant | Was already correctly synced since 2026-07-11 (commit `d225ea2`); this file's and `registry.yml`'s prior "missing `execute.md`" claims were false, produced by auditing a stale unfetched local clone. Re-verified against `origin/main` directly. `team_policy` correctly stays `stub` -- group D deliberately excludes the `_shared` core. |
+| `template-ha-config` | template (E) | full-core | conformant | Synced live 2026-07-14 (commit `441b80c`). Same promotion. `secrets.yaml`-aware settings.json overlay was already correct, unrelated to the sync. |
 
 No repo's AI-governance Markdown is classified `permission-limited` in this
 pass -- every check here was a local file read, not a live GitHub API call
@@ -97,11 +97,11 @@ settings -- is tracked separately; see "Still open" in `organogram.md`.)
 - `CLAUDE.md`'s own text and `registry.yml`'s exception rationale agree with each other and with what's on disk -- the exception is coherent on both sides, not just declared on one.
 - Status: **exception (confirmed)**.
 
-## Template repos (A/B/C/D/E) -- confirmed sync drift
+## Template repos (A/B/C/D/E) -- sync drift, resolved 2026-07-14
 
-All 5 live `template-*` repos' last sync commit predates `.github` commit
-`39558a0` ("feat: add org-tier and standardized repo agent teams", merged
-2026-07-11T23:48:54+02:00), which:
+An earlier pass of this audit found all 5 live `template-*` repos' last
+sync commit predating `.github` commit `39558a0` ("feat: add org-tier and
+standardized repo agent teams", merged 2026-07-11T23:48:54+02:00), which:
 
 - added `architect.md`, `qa-gatekeeper.md`, `reviewer.md`, `security-auditor.md`
   to `templates/_shared/.claude/agents/`, and `execute.md`, `release.md` to
@@ -111,56 +111,54 @@ All 5 live `template-*` repos' last sync commit predates `.github` commit
 - added a **group-D-specific** `execute.md` directly to
   `templates/D-infra-main-only/.claude/commands/`.
 
-None of this has reached the live repos yet:
+**Resolution:** the repo owner explicitly confirmed running
+`scripts/sync-templates.sh` (all 5 groups) on 2026-07-14. Result:
 
-| Repo | Live last sync | Missing vs. canonical |
+| Repo | Result | Commit |
 |---|---|---|
-| `template-python-docker` (A) | 2026-07-09T20:00:07+02:00 | `architect.md`, `reviewer.md`, `security-auditor.md`, `execute.md`, `release.md` |
-| `template-python-pypi` (B) | 2026-07-09T20:00:11+02:00 | same 5 files |
-| `template-docker-ha-addon` (C) | 2026-07-09T20:00:15+02:00 | same 5 files |
-| `template-infra-main-only` (D) | 2026-07-09T20:00:22+02:00 | `execute.md` only |
-| `template-ha-config` (E) | 2026-07-09T20:00:18+02:00 | same 5 files as A/B/C |
+| `template-python-docker` (A) | pushed sync commit | `abcc436` |
+| `template-python-pypi` (B) | pushed sync commit | `26d8524` |
+| `template-docker-ha-addon` (C) | pushed sync commit | `513853a` |
+| `template-infra-main-only` (D) | **already in sync** | `d225ea2` (2026-07-11) |
+| `template-ha-config` (E) | pushed sync commit | `441b80c` |
 
-Each live repo's existing `qa-gatekeeper` + `qa`/`prepush` files are
-byte-identical to their canonical counterparts -- the drift is purely
-**missing** files/content, not divergent content. Each repo's `CLAUDE.md`
-Subagents/Slash-commands sections are correspondingly behind (still
-describing the pre-`39558a0` stub, including one stale "opus/sonnet/opus...
-once the repo has real scope beyond the stub" line per group -- this is
-the one place stale model-tier prose *does* still exist; see the note
-below on why organogram.md's item #7 didn't catch it).
+**Group D correction (important):** this audit's *earlier* finding that
+group D was "missing `execute.md`" was **false**, and so was the
+`registry.yml` "CORRECTED" note that repeated it. Both were produced by
+reading this repo's *local* clone in the workspace root without fetching
+first -- that local clone's `main` was 1 commit behind `origin/main`. The
+live repo had actually been correctly synced since 2026-07-11T23:52:28+02:00
+(commit `d225ea2`, ~4 minutes after `39558a0` landed), most likely by a
+concurrent session's own sync run. This is a direct instance of the "never
+trust a stale local view" warning in `workspace/CLAUDE.md`'s
+concurrent-agent protocol -- re-verified this time by fetching
+`origin/main` directly (`git -C template-infra-main-only fetch origin main`)
+before drawing any conclusion, and all 5 local template-repo clones were
+fast-forwarded to `origin/main` to prevent the same mistake going forward.
 
-Registry-level corrections already made (2026-07-14, this branch):
+Each of A/B/C/E's `CLAUDE.md` Subagents/Slash-commands sections, previously
+flagged as describing the pre-`39558a0` stub (including stale
+"opus/sonnet/opus... once the repo has real scope beyond the stub" prose),
+were overwritten by the sync along with the agent/command files themselves
+-- resolved as a side effect, not a separate prose edit.
 
-- `template-infra-main-only`'s registry note previously claimed "re-verified
-  live 2026-07-14, matches canonical exactly, no drift" -- **this was false**
-  (evidently checked against a pre-`39558a0` canonical snapshot). Corrected
-  in `registry.yml`.
-- All 5 template repos' `registry.yml` entries now carry a `notes:` field
-  documenting the confirmed drift and that each `review_trigger` ("canonical
-  gains commands/agents beyond the stub") has already fired as of
-  `39558a0`.
+Registry-level corrections made (2026-07-14, this branch):
+
+- Groups A/B/C/E: `state` -> `active`, `team_policy` `stub` -> `full-core`
+  (their canonical is now the full shared core, not a bare
+  `qa-gatekeeper`), and each group's now-obsolete "starter repo, full team
+  unjustified" `exception:` block removed.
+- Group D: `state` -> `active`; `team_policy` correctly remains `stub` (its
+  exclusion from the `_shared` core is permanent policy, not a staged
+  drift state); its `registry.yml` note now documents the correction chain
+  above instead of repeating the false claim.
 - Root `workspace/CLAUDE.md`'s "only the first two [groups] carry
   `pyproject.toml`/`bump-type`" line was imprecise -- group C also carries
   a `pyproject.toml` (build/test tooling), just not `bump-type` scope.
-  Corrected to state the two facts separately.
+  Corrected to state the two facts separately (unrelated to the sync
+  itself, found during the same pass).
 
-**Not done here, and must not be done without explicit human confirmation
-naming the exact script/repos/options in that turn:** running
-`scripts/sync-templates.sh` to actually close the gap. This is the
-pre-existing, permanent, human-confirmed direct-push exception
-(`exceptions: sync-templates-direct-push` in `registry.yml`) -- it applies
-here unchanged. See `organogram.md`'s "Still open" and the confirmation
-checklist this audit feeds into.
-
-Once synced, a follow-up governance edit should reconsider whether
-`team_policy: stub` still accurately describes groups A/B/C/E (their
-canonical is now the full shared core, not a bare `qa-gatekeeper`) --
-flagged in each repo's `registry.yml` notes rather than resolved here,
-since it's a policy classification change that should land alongside the
-sync itself, not ahead of it.
-
-### Why the stale model-tier prose in template `CLAUDE.md`s wasn't caught by organogram.md item #7
+### Why the stale model-tier prose in template `CLAUDE.md`s wasn't caught by organogram.md item #7 (historical)
 
 Organogram.md's "Resolved" item #7 (this session, earlier) swept prose
 locations for stale `opus/sonnet/opus`-tier claims and found none -- that
@@ -169,7 +167,8 @@ sweep covered `docs/ai-migration.md`, root/template `CLAUDE.md`/`README.md`
 re-derive live-repo drift, because at the time nothing had flagged the
 live template repos as unsynced -- that finding only surfaced from this
 conformance audit's direct live-vs-canonical file comparison. The stale
-"opus/sonnet/opus... beyond the stub" phrasing that remains in the 4 live
-template repos' `CLAUDE.md`s (A/B/C/E) is a symptom of the same sync gap
-documented above, not a separate prose defect -- it will be resolved by
-the same `scripts/sync-templates.sh` run, not by a separate prose edit.
+"opus/sonnet/opus... beyond the stub" phrasing that remained in the 4 live
+template repos' `CLAUDE.md`s (A/B/C/E) was a symptom of the same sync gap
+documented above -- it was resolved by the `scripts/sync-templates.sh` run
+of 2026-07-14 (see "Template repos ... resolved" above), not by a separate
+prose edit.

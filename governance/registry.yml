@@ -356,77 +356,52 @@ repositories:
     group: A-python-docker
     default_branch: main
     branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
-    team_policy: stub
+    team_policy: full-core
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
-      Confirmed drift 2026-07-14: live's last sync commit (2026-07-09) predates .github
-      commit 39558a0 (2026-07-11, "add org-tier and standardized repo agent teams"), which
-      added the full shared core (architect/reviewer/security-auditor agents, execute/
-      release commands) to templates/_shared/.claude -- composed into every template group
-      except D. Live .claude/agents/ and .claude/commands/ still only carry qa-gatekeeper +
-      qa/prepush (the pre-39558a0 stub); CLAUDE.md's Subagents/Slash-commands text and
-      pyproject.toml are otherwise current. This is a genuine file-level sync gap, not an
-      open policy question -- 39558a0 already decided A/B/C/E render the full _shared core,
-      so the review_trigger below has fired. Needs a human-confirmed
-      `scripts/sync-templates.sh` run to close it; team_policy should be revisited from
-      stub once live matches canonical.
-    exception:
-      rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
-      owner: automationnexus-platform
-      review_trigger: >
-        canonical group A gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
-        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      abcc436) -- now carries the full shared core (architect/qa-gatekeeper/reviewer/
+      security-auditor agents, execute/prepush/qa/release commands) from
+      templates/_shared/.claude, per .github commit 39558a0 (2026-07-11). team_policy
+      promoted from stub to full-core: 39558a0 made the full core groups A/B/C/E's
+      standard rendered state, not an exception, so the prior "starter repo, full team
+      unjustified" exception block no longer applies and has been removed.
 
   - repo: template-python-pypi
     class: template
     group: B-python-pypi
     default_branch: main
     branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
-    team_policy: stub
+    team_policy: full-core
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
-      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
-      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
-      added the full shared core to templates/_shared/.claude. Live still only carries
-      qa-gatekeeper + qa/prepush. Needs a human-confirmed `scripts/sync-templates.sh` run;
-      team_policy should be revisited from stub once live matches canonical.
-    exception:
-      rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
-      owner: automationnexus-platform
-      review_trigger: >
-        canonical group B gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
-        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      26d8524) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core; the prior starter-repo exception no longer
+      applies now that A/B/C/E's standard rendered state includes the full shared core.
 
   - repo: template-docker-ha-addon
     class: template
     group: C-docker-ha-addon
     default_branch: main
     branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
-    team_policy: stub
+    team_policy: full-core
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
-      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
-      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
-      added the full shared core to templates/_shared/.claude. Live still only carries
-      qa-gatekeeper + qa/prepush (the add-on-aware overlay). Needs a human-confirmed
-      `scripts/sync-templates.sh` run; team_policy should be revisited from stub once live
-      matches canonical. Separately: this group's pyproject.toml (build/test tooling, not
-      auto-versioning) is correct and NOT part of the drift -- see root CLAUDE.md correction.
-    exception:
-      rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
-      owner: automationnexus-platform
-      review_trigger: >
-        canonical group C gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
-        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      513853a) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core. Separately: this group's pyproject.toml (build/
+      test tooling, not auto-versioning) is correct and unrelated to this sync --
+      see root CLAUDE.md's bump-type clarification.
 
   - repo: template-infra-main-only
     class: template
@@ -437,49 +412,47 @@ repositories:
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
-      CORRECTED 2026-07-14 -- the prior note here ("re-verified live 2026-07-14, matches
-      canonical exactly, no drift") was wrong and has been replaced. A fresh audit found
-      live template-infra-main-only/.claude/commands/ contains only prepush.md and qa.md
-      (dated 2026-07-06); the canonical D-infra-main-only bundle gained its own execute.md
-      in .github commit 39558a0 (2026-07-11), which live has never synced (live's last sync
-      commit is 2026-07-09, predating 39558a0). The earlier "no drift" conclusion was
-      evidently checked against a pre-39558a0 canonical snapshot. Group D's own policy
-      question (whether it should get /execute) IS already resolved -- 39558a0 added it to
-      canonical -- what remains is purely the sync gap. Needs a human-confirmed
-      `scripts/sync-templates.sh` run (group D).
+      RE-CORRECTED 2026-07-14 -- the "CORRECTED" note previously here (claiming live was
+      missing execute.md, last synced 2026-07-09) was itself wrong: it was produced by
+      checking this repo's LOCAL clone in the workspace without fetching first, and that
+      local clone's main was stale (1 commit behind origin). Live origin/main was actually
+      already fully synced as of commit d225ea2 (2026-07-11 23:52:28, ~4 min after .github
+      commit 39558a0 landed) -- confirmed by fetching origin directly and by
+      `sync-templates.sh` reporting "already in sync" on today's 2026-07-14 run. This is a
+      textbook instance of the org's own "never trust a stale local view" warning
+      (workspace/CLAUDE.md's concurrent-agent protocol) -- the earlier audit checked local
+      HEAD instead of origin/main. team_policy stays stub: unlike A/B/C/E, group D
+      deliberately does NOT receive the _shared/.claude core (sync-templates.sh explicitly
+      skips it for group D, mirroring the ARCRunner minimal-team exception) -- it carries
+      only qa-gatekeeper + execute/prepush/qa, which is its correct, unchanged, intentional
+      shape.
     exception:
-      rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
+      rationale: >
+        Starter repo; a full repo-core team (architect/reviewer/security-auditor) is
+        unjustified until a fork adopts real implementation scope. Mirrors the ARCRunner
+        minimal-team exception. Unlike A/B/C/E, sync-templates.sh deliberately excludes
+        group D from the _shared/.claude core -- this is permanent policy, not a staged
+        drift state.
       owner: automationnexus-platform
-      review_trigger: >
-        canonical group D's rendered command set changes -- FIRED 2026-07-11 (commit
-        39558a0, added execute.md); awaiting sync-templates.sh run.
+      review_trigger: group D's scope grows beyond infra-only bootstrap (same trigger shape as ARCRunner).
 
   - repo: template-ha-config
     class: template
     group: E-ha-config
     default_branch: main
     branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
-    team_policy: stub
+    team_policy: full-core
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: needs-verification
+    state: active
     notes: >
-      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
-      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
-      added the full shared core to templates/_shared/.claude. Live still only carries
-      qa-gatekeeper + qa/prepush (the yamllint-aware overlay); its secrets.yaml-aware
-      settings.json deny rules are current and NOT part of the drift. Needs a
-      human-confirmed `scripts/sync-templates.sh` run; team_policy should be revisited from
-      stub once live matches canonical.
-    exception:
-      rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
-      owner: automationnexus-platform
-      review_trigger: >
-        canonical group E gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
-        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      441b80c) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core. Its secrets.yaml-aware settings.json deny rules
+      were already current and unaffected by this sync.
 
 # -----------------------------------------------------------------------------
 # Command authority classes. Every org/repo command's confirmation_class must be
