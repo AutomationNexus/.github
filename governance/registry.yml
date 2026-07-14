@@ -1,0 +1,486 @@
+# Canonical AI/human governance registry for AutomationNexus.
+#
+# Source of truth for: repositories, AI agents, AI commands, human GitHub teams,
+# ownership, branch models, sync mechanisms, and documented exceptions. Edit via
+# feature branch -> PR -> master (this repo's trunk); validate with
+# `python scripts/validate-governance.py`. Never hand-edit a generated copy
+# (workspace-root CLAUDE.md/.claude, or a synced repo's .claude/) to fix drift found
+# here -- fix it here and re-run the relevant sync script.
+#
+# Terminology and the human-vs-AI distinction: governance/README.md
+# Rendered hierarchy + repo/team/task matrix: governance/organogram.md
+#
+# verification_state enum (used throughout this file):
+#   active              - implemented and verified live (or not applicable to verify live)
+#   desired             - documented target state, not yet implemented
+#   exception           - intentional, permanent deviation from the full/default policy
+#   needs-verification  - implementation may exist but has not been confirmed live
+#   permission-limited  - a live check was attempted and blocked by credential/plan scope
+
+schema_version: 1
+
+# -----------------------------------------------------------------------------
+# Human GitHub teams. These are the ONLY entities that hold GitHub permissions,
+# appear in CODEOWNERS, or belong to an org team. AI agents (below) are never
+# represented as GitHub members, teams, or collaborators.
+# -----------------------------------------------------------------------------
+human_teams:
+  - slug: automationnexus-admins
+    purpose: Org ownership, billing, ruleset/security-setting changes, final escalation.
+    default_repo_permission: admin
+    state: desired
+
+  - slug: automationnexus-platform
+    purpose: Owns automationnexus/.github -- reusable workflows, templates, scripts, rulesets, this registry.
+    default_repo_permission: maintain
+    state: desired
+
+  - slug: automationnexus-security
+    purpose: Security-sensitive paths across every repo -- workflows, permissions, secrets hygiene, denylists.
+    default_repo_permission: triage
+    state: desired
+
+  - slug: automationnexus-release
+    purpose: Promote/release paths -- promote-dev-to-main triggers, release workflows, tag/version policy.
+    default_repo_permission: write
+    state: desired
+
+  - slug: automationnexus-app-maintainers
+    purpose: Application/config source for the versioned app repos and HomeAssistant config.
+    default_repo_permission: write
+    state: desired
+
+# -----------------------------------------------------------------------------
+# Org-tier AI agents ("CTO desk"). Load ONLY in a Claude Code session opened at the
+# workspace root -- .claude/ does not cascade the way CLAUDE.md does. Canonical
+# source: workspace/.claude/agents/.
+# -----------------------------------------------------------------------------
+org_agents:
+  - name: chief-architect
+    model: sonnet
+    effort: high
+    rank: org-lead
+    role: Cross-repo planning and routing; emits per-repo handoff briefs.
+    decision_rights: Proposes routing, ordering, and briefs. Does not implement or push.
+    mutation_class: read-only
+    escalation_target: human
+    parent: null
+
+  - name: platform-engineer
+    model: sonnet
+    rank: org-lead
+    role: automationnexus/.github internals -- reusable workflows, templates, scripts, rulesets.
+    decision_rights: Implements within .github. No cross-repo authority.
+    mutation_class: repo-write
+    escalation_target: chief-architect
+    parent: chief-architect
+
+  - name: release-manager
+    model: sonnet
+    effort: high
+    rank: org-lead
+    role: Promote/release orchestration across repos; human-confirmed dispatches only.
+    decision_rights: >
+      Recommends bump-type and dispatch. Never runs a state-changing gh command without
+      explicit human confirmation of that exact action in the current turn.
+    mutation_class: cross-repo-write
+    confirmation_required: true
+    escalation_target: human
+    parent: chief-architect
+
+  - name: security-officer
+    model: sonnet
+    effort: high
+    rank: org-lead
+    role: Org-wide security audits, read-only.
+    decision_rights: Independent audit authority. Findings only, no fixes.
+    mutation_class: read-only
+    escalation_target: human
+    parent: null
+
+  - name: org-inspector
+    model: haiku
+    rank: org-operational
+    role: Read-only live status sweeps across all repos.
+    decision_rights: Reports only.
+    mutation_class: read-only
+    escalation_target: chief-architect
+    parent: chief-architect
+
+  - name: template-steward
+    model: sonnet
+    rank: org-lead
+    role: templates/ bundles <-> template-* repos <-> app-repo shared Claude layer consistency.
+    decision_rights: >
+      Implements template/shared-core edits. Sync scripts require human confirmation per
+      their own rules regardless of this agent's recommendation.
+    mutation_class: repo-write
+    escalation_target: platform-engineer
+    parent: platform-engineer
+
+org_commands:
+  - name: /dispatch
+    owner: chief-architect
+    confirmation_class: read-only
+    entry_conditions: Any task spanning more than one repo, or touching a reusable-workflow contract.
+    outputs: [handoff-brief]
+    handoff_handback: required
+
+  - name: /org-status
+    owner: org-inspector
+    confirmation_class: read-only
+    entry_conditions: Current org state needed, something looks broken, before acting on any PR/branch/workflow.
+    outputs: [status-table]
+
+  - name: /org-audit
+    owner: security-officer
+    confirmation_class: read-only
+    entry_conditions: Before shared-workflow/permission changes roll out; on-demand org security review.
+    outputs: [ranked-findings]
+
+  - name: /promote
+    owner: release-manager
+    confirmation_class: human-confirmation-required
+    entry_conditions: User wants to release/promote a repo, or a promote/release is stuck.
+    outputs: [gate-by-gate-status]
+
+  - name: /sync-templates
+    owner: template-steward
+    confirmation_class: human-confirmation-required
+    entry_conditions: templates/ bundles changed and need to reach the 5 template-* repos.
+    outputs: [sync-report]
+
+  - name: /sync-workspace
+    owner: platform-engineer
+    confirmation_class: human-confirmation-required
+    entry_conditions: workspace/ canonical changed and the workspace root needs refreshing.
+    outputs: [drift-report]
+
+  - name: /new-repo
+    owner: chief-architect
+    confirmation_class: human-confirmation-required
+    entry_conditions: User wants to create a new org repo.
+    outputs: [bootstrap-confirmation]
+
+# -----------------------------------------------------------------------------
+# Repo-core AI team: the 4 shared roles every full repo standardizes on. Canonical
+# source: templates/_shared/.claude/. Propagated by scripts/sync-shared-claude.sh
+# (marker-aware: preserves each repo's own `description:` line and everything below
+# `<!-- repo-specific -->`).
+# -----------------------------------------------------------------------------
+repo_core_team:
+  - name: architect
+    model: sonnet
+    effort: high
+    decision_rights: Proposes boundaries, sequencing, and validation needs. Does not implement.
+    mutation_class: read-only
+
+  - name: qa-gatekeeper
+    model: haiku
+    decision_rights: Final release/PR evidence gate. Reports pass/fail, not architectural preference.
+    mutation_class: read-only
+
+  - name: reviewer
+    model: sonnet
+    decision_rights: Independent challenge function. No rewrites unless explicitly assigned a fix pass.
+    mutation_class: read-only
+
+  - name: security-auditor
+    model: sonnet
+    effort: high
+    decision_rights: Independent challenge function. No rewrites unless explicitly assigned a fix pass.
+    mutation_class: read-only
+
+repo_core_commands:
+  - name: /execute
+    owner: main-session
+    confirmation_class: repo-write
+    entry_conditions: Any code change in this repo, from a one-file trivial fix through a multi-domain feature.
+    outputs: [risk-track-classification, pr]
+    risk_tracks: [A, B, C]
+  - name: /qa
+    owner: qa-gatekeeper
+    confirmation_class: read-only
+    entry_conditions: Local QA gate needed before PR, or as the final gate an /execute pass runs after review/security fixes.
+    outputs: [pass-fail-report]
+  - name: /prepush
+    owner: qa-gatekeeper
+    confirmation_class: read-only
+    entry_conditions: A feature branch is about to be pushed; readiness check before push.
+    outputs: [pass-fail-report]
+  - name: /release
+    owner: main-session
+    confirmation_class: human-confirmation-required
+    entry_conditions: dev CI is green and a promote/release to main is being considered.
+    outputs: [gate-by-gate-status]
+    risk_tracks: [D]
+
+# -----------------------------------------------------------------------------
+# Repositories.
+#   class:        meta | full | config-only | minimal | template
+#   team_policy:  meta-core | full-core | minimal | stub
+#   sync_role:    canonical-source | consumer | template-target | excluded
+#
+# domain_agents/extra_qa_gates/extra_orchestration are repo-local additions beyond
+# the shared repo-core team -- registered orchestration profiles, not defects.
+# -----------------------------------------------------------------------------
+repositories:
+  - repo: .github
+    class: meta
+    default_branch: master
+    branch_flow: "feature -> PR -> master"
+    team_policy: meta-core
+    domain_agents: [workflow-engineer]
+    dev_only_files: false
+    sync_role: canonical-source
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      Canonical source for workspace/ (org tier) and templates/_shared/.claude/
+      (repo core). This registry lives here. architect + security-auditor roles are
+      present in .claude/agents/ -- meta-repo team complete (organogram.md open items
+      #1, resolved).
+
+  - repo: CognitiveSystems
+    class: full
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main -> release.yml"
+    team_policy: full-core
+    domain_agents: [service-engineer, frontend-engineer]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: needs-verification
+    notes: "CLAUDE.md's /pr routing defect fixed (CognitiveSystems PR #56, 2026-07-14)."
+
+  - repo: MediaRefinery
+    class: full
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main -> release.yml"
+    team_policy: full-core
+    domain_agents: [backend-engineer, frontend-engineer]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: registry previously listed none, but
+      .claude/agents/ and CLAUDE.md's Subagents table both document backend-engineer
+      (src/mediarefinery/ FastAPI/Immich/ONNX/OCR pipeline) and frontend-engineer
+      (frontend/ React dashboard) as real, routed domain agents. Registry data was
+      simply never recorded, not a repo-side defect.
+
+  - repo: ModelDeck
+    class: full
+    default_branch: main
+    branch_flow: >-
+      feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main ->
+      release.yml (+ push-triggered add-on-only path on modeldeck/**, bump-type=none)
+    team_policy: full-core
+    domain_agents: [mqtt-engineer, addon-engineer]
+    extra_qa_gates: [addon-qa-gatekeeper]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: exception
+    exception:
+      rationale: >
+        Unlike its 3 sibling app repos (default dev), ModelDeck's live default branch is
+        deliberately main -- documented in ModelDeck/CLAUDE.md: the HA add-on store reads
+        the add-on manifest from the default branch, and GitHub Actions `schedule:`
+        triggers always evaluate the workflow file version on the default branch, never
+        dev's copy. Re-verified live 2026-07-14 (gh repo view): confirmed main, matches
+        the documented rationale -- not drift.
+      owner: automationnexus-app-maintainers
+      review_trigger: HA add-on discovery mechanism changes, or ModelDeck drops its add-on
+        channels and becomes a pure Python service.
+    notes: >
+      architect existed locally but was missing from the repo's visible routing table --
+      fixed (ModelDeck PR #107). .claude/settings.json already carries the
+      Bash(git push origin dev:*) / Bash(git push origin main:*) denies -- re-verified live
+      2026-07-14, no action needed (was already fixed by the time this was re-checked).
+
+  - repo: Uploadarr
+    class: full
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main -> release.yml"
+    team_policy: full-core
+    domain_agents: [tracker-engineer, frontend-engineer]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: registry previously listed none, but
+      .claude/agents/ and CLAUDE.md's Subagents table both document tracker-engineer
+      (Python backend, tracker automation, upload pipeline) and frontend-engineer
+      (React dashboard) as real, routed domain agents. Registry data was simply never
+      recorded, not a repo-side defect.
+
+  - repo: HomeAssistant
+    class: config-only
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main (no version bump; no pyproject.toml)"
+    team_policy: full-core
+    domain_agents: [yaml-engineer, live-inspector, drift-sync, release-operator]
+    extra_orchestration: [dry-run-deploy]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: needs-verification
+    notes: >
+      domain_agents corrected 2026-07-14: yaml-engineer (HA YAML/packages/blueprints/
+      dashboards/helpers) was present in .claude/agents/ and CLAUDE.md's Subagents
+      table but missing from the registry -- added. extra_orchestration's
+      dry-run-deploy is not an agent file; it names the /deploy-dry-run command
+      (dispatches release-operator for a deploy preflight), confirmed intentional,
+      not drift.
+
+  - repo: ARCRunner
+    class: minimal
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch, no promote workflow)"
+    team_policy: minimal
+    domain_agents: []
+    dev_only_files: false
+    sync_role: excluded
+    owning_team: automationnexus-platform
+    state: exception
+    exception:
+      rationale: Single-Dockerfile/one-workflow runner image build does not justify a full team.
+      owner: automationnexus-platform
+      review_trigger: scope grows beyond one Dockerfile/one workflow.
+
+  - repo: template-python-docker
+    class: template
+    group: A-python-docker
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
+    team_policy: full-core
+    dev_only_files: false
+    sync_role: template-target
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      abcc436) -- now carries the full shared core (architect/qa-gatekeeper/reviewer/
+      security-auditor agents, execute/prepush/qa/release commands) from
+      templates/_shared/.claude, per .github commit 39558a0 (2026-07-11). team_policy
+      promoted from stub to full-core: 39558a0 made the full core groups A/B/C/E's
+      standard rendered state, not an exception, so the prior "starter repo, full team
+      unjustified" exception block no longer applies and has been removed.
+
+  - repo: template-python-pypi
+    class: template
+    group: B-python-pypi
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
+    team_policy: full-core
+    dev_only_files: false
+    sync_role: template-target
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      26d8524) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core; the prior starter-repo exception no longer
+      applies now that A/B/C/E's standard rendered state includes the full shared core.
+
+  - repo: template-docker-ha-addon
+    class: template
+    group: C-docker-ha-addon
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
+    team_policy: full-core
+    dev_only_files: false
+    sync_role: template-target
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      513853a) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core. Separately: this group's pyproject.toml (build/
+      test tooling, not auto-versioning) is correct and unrelated to this sync --
+      see root CLAUDE.md's bump-type clarification.
+
+  - repo: template-infra-main-only
+    class: template
+    group: D-infra-main-only
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
+    team_policy: stub
+    dev_only_files: false
+    sync_role: template-target
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      RE-CORRECTED 2026-07-14 -- the "CORRECTED" note previously here (claiming live was
+      missing execute.md, last synced 2026-07-09) was itself wrong: it was produced by
+      checking this repo's LOCAL clone in the workspace without fetching first, and that
+      local clone's main was stale (1 commit behind origin). Live origin/main was actually
+      already fully synced as of commit d225ea2 (2026-07-11 23:52:28, ~4 min after .github
+      commit 39558a0 landed) -- confirmed by fetching origin directly and by
+      `sync-templates.sh` reporting "already in sync" on today's 2026-07-14 run. This is a
+      textbook instance of the org's own "never trust a stale local view" warning
+      (workspace/CLAUDE.md's concurrent-agent protocol) -- the earlier audit checked local
+      HEAD instead of origin/main. team_policy stays stub: unlike A/B/C/E, group D
+      deliberately does NOT receive the _shared/.claude core (sync-templates.sh explicitly
+      skips it for group D, mirroring the ARCRunner minimal-team exception) -- it carries
+      only qa-gatekeeper + execute/prepush/qa, which is its correct, unchanged, intentional
+      shape.
+    exception:
+      rationale: >
+        Starter repo; a full repo-core team (architect/reviewer/security-auditor) is
+        unjustified until a fork adopts real implementation scope. Mirrors the ARCRunner
+        minimal-team exception. Unlike A/B/C/E, sync-templates.sh deliberately excludes
+        group D from the _shared/.claude core -- this is permanent policy, not a staged
+        drift state.
+      owner: automationnexus-platform
+      review_trigger: group D's scope grows beyond infra-only bootstrap (same trigger shape as ARCRunner).
+
+  - repo: template-ha-config
+    class: template
+    group: E-ha-config
+    default_branch: main
+    branch_flow: "feature -> PR -> main (no dev branch); sync-templates.sh direct-pushes main"
+    team_policy: full-core
+    dev_only_files: false
+    sync_role: template-target
+    owning_team: automationnexus-platform
+    state: active
+    notes: >
+      Synced live 2026-07-14 via human-confirmed `scripts/sync-templates.sh` (commit
+      441b80c) -- same fix as template-python-docker (see its notes). team_policy
+      promoted from stub to full-core. Its secrets.yaml-aware settings.json deny rules
+      were already current and unaffected by this sync.
+
+# -----------------------------------------------------------------------------
+# Command authority classes. Every org/repo command's confirmation_class must be
+# one of these.
+# -----------------------------------------------------------------------------
+authority_classes:
+  - read-only
+  - repo-write
+  - cross-repo-write
+  - admin-state
+  - human-confirmation-required
+
+# -----------------------------------------------------------------------------
+# Explicit exceptions not already captured on a repo/agent entry above.
+# -----------------------------------------------------------------------------
+exceptions:
+  - id: sync-templates-direct-push
+    description: >
+      scripts/sync-templates.sh direct-pushes to the 5 template-* repos' main branch --
+      the org's one documented protected-branch-bypass. Always requires explicit human
+      confirmation before each run.
+    owner: automationnexus-platform
+    review_trigger: never automate further -- confirmation-per-run is permanent by design.
+
+  - id: modeldeck-addon-auto-promote
+    description: >
+      ModelDeck's push-triggered add-on-only promote path auto-promotes modeldeck/**
+      changes with bump-type=none, bypassing the human-confirmed dispatch every other
+      promotion requires.
+    owner: automationnexus-app-maintainers
+    review_trigger: scope of the push-triggered path expands beyond modeldeck/**.

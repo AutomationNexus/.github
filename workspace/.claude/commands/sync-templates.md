@@ -11,6 +11,7 @@ Procedure it must follow, in order:
    in the `.github` clone).
 2. Run `scripts/sync-templates.sh --check` and show the orphan/drift report.
 3. Restate that this script DIRECT-PUSHES to the template repos' `main` — the org's one
-   documented direct-push exception — and STOP for explicit human confirmation.
+   documented direct-push exception (`CLAUDE.md`'s "Unified authority and confirmation")
+   — and STOP for explicit human confirmation.
 4. Only after confirmation: run `scripts/sync-templates.sh [groups]` from the `.github`
    clone (Git Bash), then verify each synced repo's latest `main` commit landed.

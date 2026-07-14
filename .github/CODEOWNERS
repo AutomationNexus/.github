@@ -1,0 +1,11 @@
+# Governed by governance/registry.yml -- edit human ownership there first, then here.
+# Default owner: platform (this repo IS automationnexus/.github)
+* @AutomationNexus/automationnexus-platform
+
+# Security-sensitive paths: workflows, rulesets, sync/bootstrap scripts
+/.github/workflows/ @AutomationNexus/automationnexus-security
+/rulesets/ @AutomationNexus/automationnexus-security
+/scripts/ @AutomationNexus/automationnexus-security
+
+# Governance registry -- platform and security co-own ownership changes
+/governance/ @AutomationNexus/automationnexus-platform @AutomationNexus/automationnexus-security

@@ -1,9 +1,17 @@
 # CLAUDE.md — automationnexus/.github
 
 This is the AutomationNexus org meta-repo: reusable GitHub Actions workflows, repo
-templates (groups A–E), branch-protection rulesets, and the bootstrap/sync scripts
-that wire a new repo together. See `README.md` for the full architecture; this file
+templates (groups A–E), branch-protection rulesets, the bootstrap/sync scripts
+that wire a new repo together, and the org's AI/human governance registry
+(`governance/`). See `README.md` for the full architecture; this file
 is instructions for Claude Code when working in this repo specifically.
+
+The canonical source of truth for org agents, commands, human teams, repo
+ownership, and documented exceptions is
+[`governance/registry.yml`](governance/registry.yml) — see
+[`governance/README.md`](governance/README.md) for terminology and the
+human-vs-AI distinction, and [`governance/organogram.md`](governance/organogram.md)
+for a rendered hierarchy and repo/team/task matrix.
 
 ## What this repo is NOT
 
@@ -63,6 +71,29 @@ file) or these files will reach `main` and fail `ci.yml`'s Guard Main Files hygi
 
 `templates/_shared/CLAUDE.md.template` and `templates/_shared/.claude/` are the seeds
 new repos start from — keep them in sync with whatever pattern proves out during rollout.
+
+## Meta-repo AI team
+
+This repo runs the full repo-core roster (`architect`, `reviewer`,
+`qa-gatekeeper`, `security-auditor`) plus one domain specialist
+(`workflow-engineer`), same as any other full org repo — `.github` is
+platform infrastructure with real implementation risk (reusable-workflow
+contracts every consumer depends on), not a special case that skips review.
+
+| Agent | Model | Role |
+|-------|-------|------|
+| `architect` | sonnet (high effort) | Plans reusable-workflow contract changes, template propagation, ruleset structure, cross-repo compatibility — before implementation |
+| `workflow-engineer` | sonnet | Implements workflow/template/ruleset/sync-script changes |
+| `reviewer` | sonnet | Independent review — compat regressions, unsafe token use, template drift, script hazards |
+| `security-auditor` | sonnet (high effort) | Actions permissions, CI-Bot credential use, ruleset bypass scope, template secret hygiene, sync-script safety |
+| `qa-gatekeeper` | haiku | Final local validation gate before PR |
+
+Routing: multi-file or contract-shape changes start with `architect`;
+`workflow-engineer` implements; `reviewer` (and `security-auditor` when a
+change touches workflows/permissions/secrets/rulesets/sync scripts) checks
+before `qa-gatekeeper` gates the PR. Full agent roster, decision rights, and
+mutation classes are registered in [`governance/registry.yml`](governance/registry.yml)
+under `repositories: .github` and `repo_core_team:`.
 
 ## Org-tier workspace layer (`workspace/`)
 

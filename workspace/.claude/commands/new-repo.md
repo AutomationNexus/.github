@@ -13,5 +13,6 @@ Walk the user through creating a new org repo: $ARGUMENTS
    (creates `dev`, sets CI-Bot App secrets — group B also needs `PYPI_API_TOKEN` in the
    operator's env — and applies rulesets for public repos).
 3. STOP for explicit human confirmation before any `gh repo create`, secret write, or
-   push.
+   push — this is an `admin-state` action under `CLAUDE.md`'s "Unified authority and
+   confirmation".
 4. After bootstrap, run the guide's verification commands and report the results.

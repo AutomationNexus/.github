@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://automationnexus.example/governance/registry.schema.json",
+  "title": "AutomationNexus governance registry",
+  "description": "Structural contract for governance/registry.yml. Used as documentation and, when the optional jsonschema package is installed, by scripts/validate-governance.py. The hand-written checks in that script are authoritative even when jsonschema is unavailable.",
+  "type": "object",
+  "required": ["schema_version", "human_teams", "org_agents", "org_commands", "repo_core_team", "repo_core_commands", "repositories", "authority_classes", "exceptions"],
+  "additionalProperties": false,
+  "$defs": {
+    "verification_state": {
+      "type": "string",
+      "enum": ["active", "desired", "exception", "needs-verification", "permission-limited"]
+    },
+    "mutation_class": {
+      "type": "string",
+      "enum": ["read-only", "repo-write", "cross-repo-write", "admin-state", "human-confirmation-required"]
+    },
+    "confirmation_class": {
+      "type": "string",
+      "enum": ["read-only", "repo-write", "cross-repo-write", "admin-state", "human-confirmation-required"]
+    },
+    "exception_block": {
+      "type": "object",
+      "required": ["rationale", "owner", "review_trigger"],
+      "properties": {
+        "rationale": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "review_trigger": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+
+    "human_teams": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["slug", "purpose", "default_repo_permission", "state"],
+        "properties": {
+          "slug": {"type": "string", "pattern": "^automationnexus-[a-z-]+$"},
+          "purpose": {"type": "string", "minLength": 1},
+          "default_repo_permission": {"type": "string", "enum": ["admin", "maintain", "write", "triage", "read"]},
+          "state": {"$ref": "#/$defs/verification_state"}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "org_agents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "model", "rank", "role", "decision_rights", "mutation_class", "escalation_target", "parent"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "enum": ["haiku", "sonnet", "opus"]},
+          "effort": {"type": "string", "enum": ["low", "medium", "high", "xhigh", "max"]},
+          "rank": {"type": "string", "enum": ["org-lead", "org-operational"]},
+          "role": {"type": "string", "minLength": 1},
+          "decision_rights": {"type": "string", "minLength": 1},
+          "mutation_class": {"$ref": "#/$defs/mutation_class"},
+          "confirmation_required": {"type": "boolean"},
+          "escalation_target": {"type": "string", "minLength": 1},
+          "parent": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "org_commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "owner", "confirmation_class", "entry_conditions", "outputs"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^/[a-z-]+$"},
+          "owner": {"type": "string", "minLength": 1},
+          "confirmation_class": {"$ref": "#/$defs/confirmation_class"},
+          "entry_conditions": {"type": "string", "minLength": 1},
+          "outputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "handoff_handback": {"type": "string", "enum": ["required"]}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "repo_core_team": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "model", "decision_rights", "mutation_class"],
+        "properties": {
+          "name": {"type": "string", "enum": ["architect", "qa-gatekeeper", "reviewer", "security-auditor"]},
+          "model": {"type": "string", "enum": ["haiku", "sonnet", "opus"]},
+          "effort": {"type": "string", "enum": ["low", "medium", "high", "xhigh", "max"]},
+          "decision_rights": {"type": "string", "minLength": 1},
+          "mutation_class": {"$ref": "#/$defs/mutation_class"}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "repo_core_commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "owner", "confirmation_class", "entry_conditions", "outputs"],
+        "properties": {
+          "name": {"type": "string", "enum": ["/execute", "/qa", "/prepush", "/release"]},
+          "owner": {"type": "string", "minLength": 1},
+          "confirmation_class": {"$ref": "#/$defs/confirmation_class"},
+          "entry_conditions": {"type": "string", "minLength": 1},
+          "outputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "risk_tracks": {"type": "array", "items": {"type": "string", "enum": ["A", "B", "C", "D"]}}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["repo", "class", "default_branch", "branch_flow", "team_policy", "dev_only_files", "sync_role", "owning_team", "state"],
+        "properties": {
+          "repo": {"type": "string", "minLength": 1},
+          "class": {"type": "string", "enum": ["meta", "full", "config-only", "minimal", "template"]},
+          "group": {"type": "string"},
+          "default_branch": {"type": "string", "minLength": 1},
+          "branch_flow": {"type": "string", "minLength": 1},
+          "team_policy": {"type": "string", "enum": ["meta-core", "full-core", "minimal", "stub"]},
+          "domain_agents": {"type": "array", "items": {"type": "string"}},
+          "extra_qa_gates": {"type": "array", "items": {"type": "string"}},
+          "extra_orchestration": {"type": "array", "items": {"type": "string"}},
+          "dev_only_files": {"type": "boolean"},
+          "sync_role": {"type": "string", "enum": ["canonical-source", "consumer", "template-target", "excluded"]},
+          "owning_team": {"type": "string"},
+          "state": {"$ref": "#/$defs/verification_state"},
+          "notes": {"type": "string"},
+          "exception": {"$ref": "#/$defs/exception_block"}
+        },
+        "additionalProperties": false
+      }
+    },
+
+    "authority_classes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "const": ["read-only", "repo-write", "cross-repo-write", "admin-state", "human-confirmation-required"]
+    },
+
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "owner", "review_trigger"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "owner": {"type": "string", "minLength": 1},
+          "review_trigger": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -9,3 +9,7 @@ Return its compact status table verbatim: repo | local branch/dirty state | open
 last run conclusions | anomalies. Read-only — no fixes, no state changes. If anomalies
 were flagged, suggest (but do not run) the next diagnostic step per the workspace
 CLAUDE.md "Emergency / doubt checklist".
+
+This command is the org-root operating protocol's "refresh state" step (`CLAUDE.md`) run
+standalone — run it before acting on any PR/branch/workflow, not only when something
+looks broken.

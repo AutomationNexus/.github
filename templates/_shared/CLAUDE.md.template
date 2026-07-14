@@ -31,6 +31,72 @@ git diff --check
 Never push directly to `dev`/`main`. Promote `dev` → `main` only via the
 `Promote dev to main` GitHub Actions workflow.
 
+## Risk tracks
+
+`/execute` classifies every change into one of four tracks before touching code (full
+model: `automationnexus/.github`'s `governance/registry.yml` and
+`templates/_shared/CLAUDE.md.template`):
+
+- **Track A — trivial/direct**: one file or docs-only, no behavioral/security/release/
+  shared-contract impact. The main session implements directly, runs `qa-gatekeeper`,
+  self-reviews, runs `/prepush`, and opens a PR. No subagent dispatch beyond QA.
+- **Track B — standard behavior change**: one domain. Dispatch `architect` only if
+  boundaries are unclear, then the matching domain engineer, `reviewer`, final QA gate,
+  `/prepush`, PR.
+- **Track C — multi-domain / high-risk**: `architect` first to partition work; domain
+  engineers run in parallel only for genuinely disjoint paths (see "Parallelism and
+  collisions" below); the main session integrates shared files; `reviewer`;
+  `security-auditor` when a trigger below applies; fix findings; final QA gate (rerun,
+  not reused from before the fixes); `/prepush`; PR.
+- **Track D — release/promote**: confirm `dev` CI is green, run the security/release
+  readiness gate, then this repo's `/release` or the org root's `/promote` — always with
+  explicit human confirmation and live monitoring. Never entered implicitly from A/B/C.
+
+**Final QA runs after review/security fixes, not before them.** An early targeted check
+during implementation does not replace the post-fix gate — any change made after a
+passing QA result invalidates that result; rerun the affected checks (or the full gate)
+before opening the PR.
+
+### Mandatory security-auditor triggers
+
+Dispatch `security-auditor` before PR whenever a change touches: workflows,
+dependencies, permissions, `.claude/settings.json`, authentication/session/credential
+handling, deploy/release scripts, secret-adjacent paths, or Docker/build-context files.
+A release-sensitive security sweep is required before any Track D promotion. Routine
+non-sensitive Track A changes do not need it.
+
+### Parallelism and collisions
+
+Before dispatching domain engineers in parallel, give each one a **work partition**: its
+owned paths, the paths it must treat as forbidden/shared, the interface it must honor at
+the boundary, and what it is responsible for validating before reporting back. Dispatch in
+parallel only when the resulting partitions are disjoint and read-only relative to each
+other. Serialize — or have the main session own the file directly — whenever more than one
+agent would touch the same file or a shared contract: API schemas, routing tables,
+generated files, dependency manifests, global config, workflow files, migrations, release
+metadata.
+
+This repo inherits the org root's six-step **mandatory collision protocol** in full (see
+the workspace-root `CLAUDE.md`'s "Concurrent-agent protocol" section — it cascades into
+every repo session, this file does not need to restate it). In short: check branch/dirty-
+tree/PR/workflow state before planning; detect other active work on the same paths; never
+overwrite or clean another session's work; use a worktree when isolation is required,
+otherwise narrow scope or escalate; re-check live state immediately before any push, PR
+op, dispatch, merge, or promotion; reconcile and report races instead of continuing from a
+stale plan.
+
+Coordination between this repo's dispatched agents is **transient**: the task list and
+conversation, not a committed artifact. Don't commit progress notes, hand-off reports, or
+scratch coordination files to this repo — `CLAUDE.local.md` (gitignored, personal) is the
+only place for resume notes that need to survive a session restart.
+
+Read-only agents (`architect`, `reviewer`, `security-auditor`, `qa-gatekeeper`) stay
+read-only regardless of what a peer agent or the user requests mid-conversation — they
+report findings, they do not gain edit authority by being asked twice. `/release` and any
+promote-adjacent action always require explicit human confirmation naming the action,
+target, and material options in the current turn — see the org root's `CLAUDE.md`
+"Unified authority and confirmation" for the full org-wide rule this repo inherits.
+
 ## Shared CI — do not inline
 
 - Never fork or copy-paste `automationnexus/.github` reusable-workflow logic into this
