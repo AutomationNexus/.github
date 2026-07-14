@@ -83,7 +83,10 @@ tracked in [`governance/registry.yml`](governance/registry.yml) — the single s
 truth. Read [`governance/README.md`](governance/README.md) first for terminology and
 the human-vs-AI distinction (AI agents hold no GitHub permissions or team membership;
 only `human_teams` do), then [`governance/organogram.md`](governance/organogram.md) for
-the rendered hierarchy and repo/team/task matrix. Validate the registry and every
+the rendered hierarchy and repo/team/task matrix, and
+[`governance/conformance.md`](governance/conformance.md) for the full per-repo
+conformance record (expected vs. actual agents/commands, routing correctness, drift,
+and confirmed exceptions across all 12 repos). Validate the registry and every
 agent/command file against it with:
 
 ```bash

@@ -38,7 +38,11 @@ convenience summary; the registry is authoritative if they ever disagree.
   `template-docker-ha-addon`, `template-ha-config`,
   `template-infra-main-only`) — real, live starter repos synced from
   `.github/templates/` by `scripts/sync-templates.sh`. Only the first two
-  (Python app groups) carry `pyproject.toml`/`bump-type`.
+  (Python app groups) carry `bump-type` (auto-versioning scope). `pyproject.toml`
+  presence is broader than that: group C (`template-docker-ha-addon`) also ships
+  one, for its own build/test tooling — its `promote-dev-to-main.yml` passes no
+  `bump-type` input, so it stays outside auto-versioning scope despite the file's
+  presence. Don't conflate "has a `pyproject.toml`" with "is in bump-type scope."
 
 ## Branch/PR flow (hard rule)
 

@@ -361,10 +361,24 @@ repositories:
     sync_role: template-target
     owning_team: automationnexus-platform
     state: needs-verification
+    notes: >
+      Confirmed drift 2026-07-14: live's last sync commit (2026-07-09) predates .github
+      commit 39558a0 (2026-07-11, "add org-tier and standardized repo agent teams"), which
+      added the full shared core (architect/reviewer/security-auditor agents, execute/
+      release commands) to templates/_shared/.claude -- composed into every template group
+      except D. Live .claude/agents/ and .claude/commands/ still only carry qa-gatekeeper +
+      qa/prepush (the pre-39558a0 stub); CLAUDE.md's Subagents/Slash-commands text and
+      pyproject.toml are otherwise current. This is a genuine file-level sync gap, not an
+      open policy question -- 39558a0 already decided A/B/C/E render the full _shared core,
+      so the review_trigger below has fired. Needs a human-confirmed
+      `scripts/sync-templates.sh` run to close it; team_policy should be revisited from
+      stub once live matches canonical.
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform
-      review_trigger: canonical group A gains commands/agents beyond qa-gatekeeper + /qa + /prepush.
+      review_trigger: >
+        canonical group A gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
+        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
 
   - repo: template-python-pypi
     class: template
@@ -376,10 +390,18 @@ repositories:
     sync_role: template-target
     owning_team: automationnexus-platform
     state: needs-verification
+    notes: >
+      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
+      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
+      added the full shared core to templates/_shared/.claude. Live still only carries
+      qa-gatekeeper + qa/prepush. Needs a human-confirmed `scripts/sync-templates.sh` run;
+      team_policy should be revisited from stub once live matches canonical.
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform
-      review_trigger: canonical group B gains commands/agents beyond qa-gatekeeper + /qa + /prepush.
+      review_trigger: >
+        canonical group B gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
+        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
 
   - repo: template-docker-ha-addon
     class: template
@@ -391,10 +413,20 @@ repositories:
     sync_role: template-target
     owning_team: automationnexus-platform
     state: needs-verification
+    notes: >
+      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
+      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
+      added the full shared core to templates/_shared/.claude. Live still only carries
+      qa-gatekeeper + qa/prepush (the add-on-aware overlay). Needs a human-confirmed
+      `scripts/sync-templates.sh` run; team_policy should be revisited from stub once live
+      matches canonical. Separately: this group's pyproject.toml (build/test tooling, not
+      auto-versioning) is correct and NOT part of the drift -- see root CLAUDE.md correction.
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform
-      review_trigger: canonical group C gains commands/agents beyond qa-gatekeeper + /qa + /prepush.
+      review_trigger: >
+        canonical group C gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
+        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
 
   - repo: template-infra-main-only
     class: template
@@ -405,16 +437,24 @@ repositories:
     dev_only_files: false
     sync_role: template-target
     owning_team: automationnexus-platform
-    state: active
+    state: needs-verification
     notes: >
-      Re-verified live 2026-07-14: template-infra-main-only's .claude/commands (execute,
-      prepush, qa) and .claude/agents (qa-gatekeeper) match the canonical D-infra-main-only
-      bundle exactly. No drift -- the earlier "canonical includes /execute, live may not"
-      concern did not hold up; policy question resolved as conformant.
+      CORRECTED 2026-07-14 -- the prior note here ("re-verified live 2026-07-14, matches
+      canonical exactly, no drift") was wrong and has been replaced. A fresh audit found
+      live template-infra-main-only/.claude/commands/ contains only prepush.md and qa.md
+      (dated 2026-07-06); the canonical D-infra-main-only bundle gained its own execute.md
+      in .github commit 39558a0 (2026-07-11), which live has never synced (live's last sync
+      commit is 2026-07-09, predating 39558a0). The earlier "no drift" conclusion was
+      evidently checked against a pre-39558a0 canonical snapshot. Group D's own policy
+      question (whether it should get /execute) IS already resolved -- 39558a0 added it to
+      canonical -- what remains is purely the sync gap. Needs a human-confirmed
+      `scripts/sync-templates.sh` run (group D).
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform
-      review_trigger: canonical group D's rendered command set changes.
+      review_trigger: >
+        canonical group D's rendered command set changes -- FIRED 2026-07-11 (commit
+        39558a0, added execute.md); awaiting sync-templates.sh run.
 
   - repo: template-ha-config
     class: template
@@ -426,10 +466,20 @@ repositories:
     sync_role: template-target
     owning_team: automationnexus-platform
     state: needs-verification
+    notes: >
+      Confirmed drift 2026-07-14: same gap as template-python-docker (see its notes) --
+      live's last sync (2026-07-09) predates .github commit 39558a0 (2026-07-11), which
+      added the full shared core to templates/_shared/.claude. Live still only carries
+      qa-gatekeeper + qa/prepush (the yamllint-aware overlay); its secrets.yaml-aware
+      settings.json deny rules are current and NOT part of the drift. Needs a
+      human-confirmed `scripts/sync-templates.sh` run; team_policy should be revisited from
+      stub once live matches canonical.
     exception:
       rationale: Starter repo; a full team is unjustified until a fork adopts real implementation scope.
       owner: automationnexus-platform
-      review_trigger: canonical group E gains commands/agents beyond qa-gatekeeper + /qa + /prepush.
+      review_trigger: >
+        canonical group E gains commands/agents beyond qa-gatekeeper + /qa + /prepush --
+        FIRED 2026-07-11 (commit 39558a0); awaiting sync-templates.sh run.
 
 # -----------------------------------------------------------------------------
 # Command authority classes. Every org/repo command's confirmation_class must be

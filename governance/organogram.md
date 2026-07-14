@@ -152,17 +152,45 @@ repo's sibling clone (see "Resolved" #7 below).
    location that names a model/effort tier for an agent role (`docs/ai-
    migration.md`, root and template `CLAUDE.md`/`README.md` files, this
    file, `workspace/CLAUDE.md`) against each agent's own frontmatter and
-   `registry.yml`. No stale or mismatched text found anywhere — `opus` only
-   ever appears as a documented main-session escalation directive
-   (`/model opus`/`opusplan`), never as a per-agent tier claim. Already
-   aligned by the time this was checked, 2026-07-14 — no edit needed.
+   `registry.yml`. No stale or mismatched text found anywhere in the
+   *canonical* sources — `opus` only ever appears as a documented
+   main-session escalation directive (`/model opus`/`opusplan`), never as a
+   per-agent tier claim. (A related but distinct instance of stale prose
+   *was* later found in 4 live, unsynced template repos — see item #8; it's
+   a sync-drift symptom, not a separate canonical-prose defect.)
+8. **Full 12-repo conformance audit** — every repo's local clone inspected
+   against `registry.yml`: core roster, domain agents, command references,
+   routing-table completeness, read-only-role tool grants, and
+   `settings.json` branch-protection denies. Full record:
+   [`conformance.md`](conformance.md). Result: 7 of 12 repos conformant or
+   a confirmed exception (`.github`, CognitiveSystems, MediaRefinery,
+   ModelDeck, Uploadarr, HomeAssistant, ARCRunner); the 5 template repos are
+   confirmed out of sync with a canonical change (commit `39558a0`,
+   2026-07-11) that added the full shared core to groups A/B/C/E and a new
+   `execute.md` to group D — none of it has reached the live repos yet.
+   One existing registry note (`template-infra-main-only` claiming
+   "re-verified, no drift") was found to be false and has been corrected.
+   `registry.yml` and `workspace/CLAUDE.md` (`pyproject.toml`/`bump-type`
+   phrasing) updated accordingly, 2026-07-14.
 
 ### Still open
 
-The remaining implementation work is: a full 12-repo conformance record
-(expected vs. actual agents/commands, routing correctness, model/tool/
-mutation-class consistency, risk-track sequencing, drift/exceptions --
-plan Section 14) and the human-confirmed rollout items in plan Sections
-5/6/7 (human GitHub team creation, CODEOWNERS rollout, live ruleset/
-security-setting changes, `sync-*.sh` script runs). Neither is a defect
-found by the audit -- both are staged, human-gated work.
+Two items remain, both staged and human-gated — neither is a defect this
+audit can resolve on its own:
+
+1. **A human-confirmed `scripts/sync-templates.sh` run** to close the
+   confirmed template-repo drift documented in `conformance.md` and in
+   each of the 5 template repos' `registry.yml` entries. This is the org's
+   one standing direct-push-to-`main` exception
+   (`exceptions: sync-templates-direct-push`) — always requires the human
+   to name the exact repos/options in the current turn before it runs. A
+   follow-up registry edit should also reconsider `team_policy: stub` for
+   groups A/B/C/E once their live state matches canonical (their canonical
+   is no longer a bare `qa-gatekeeper` stub).
+2. **The human-confirmed rollout items in plan Sections 5/6/7** — human
+   GitHub team creation, CODEOWNERS rollout beyond the 3 repos that have
+   any CODEOWNERS file today (CognitiveSystems and HomeAssistant use an
+   individual `@t-abraham` fallback per Section 5's sanctioned temporary
+   state; MediaRefinery's is inert/fully commented out; the other 9 repos
+   have no CODEOWNERS file at all), live ruleset/security-setting changes,
+   and `sync-shared-claude.sh`/`sync-workspace.sh` runs.
