@@ -125,6 +125,60 @@ the same time as you. **Never trust a stale view of a repo's state.**
   `origin/dev`/`origin/main`, don't assume you need to reuse or clean it up
   first.
 
+### Mandatory collision protocol
+
+Run this sequence before any multi-repo or multi-agent action, and re-run
+the last two steps immediately before any outward-facing operation:
+
+1. **Start with branch, dirty-tree, remote PR, and relevant workflow
+   checks** — `git status --short --branch`, `gh pr list`, `gh run list` for
+   every repo the task touches, before planning sequencing or dispatching
+   work.
+2. **Detect active branches/PRs or local work touching the same repo/
+   paths** — another session's feature branch, an open PR against the same
+   files, or a workflow run already in flight counts as active work, not
+   noise.
+3. **Never overwrite or clean another session's work** — no
+   `git reset --hard`, `git clean`, or force-checkout over a branch you did
+   not create this turn, even if it looks stale or abandoned.
+4. **Use a worktree when isolation is required and supported; otherwise
+   pause and narrow scope, or escalate** — `git worktree add
+   ../<repo>-<purpose> -b <branch> origin/dev` keeps a dirty branch
+   untouched. If a worktree isn't viable (no git repo present — e.g. this
+   workspace root itself), narrow the task to a non-colliding slice or ask
+   the human before proceeding.
+5. **Re-check live state before pushes, PR operations, workflow dispatches,
+   merges, promotions, or admin changes** — the state captured in step 1 can
+   be minutes stale by the time you act; a second `gh pr view`/`gh run list`
+   immediately before the mutating call is not redundant.
+6. **If remote state changed during work, reconcile and report the race
+   rather than proceeding from a stale plan** — e.g. a target branch moved,
+   a PR you meant to update already merged, or a workflow you were about to
+   dispatch already ran. Tell the user what changed and what you're doing
+   about it instead of silently continuing the original plan.
+
+### Durable vs. transient state
+
+Coordinate through **durable shared state** — evidence that persists and
+that any session, yours or another agent's, can independently re-verify:
+
+- the canonical governance registry (`governance/registry.yml`) and
+  `CLAUDE.md` instructions across the org;
+- git branch/commit history and clean-working-tree evidence;
+- PR, check, workflow-run, and release state on GitHub;
+- explicit handoff/handback packets (see "Handoff packet" / "Handback
+  packet" below).
+
+The task list and conversation transcript are **transient orchestration
+state** — real within a session, but invisible to any other session and not
+something another agent or a future session can rely on. Do not turn them
+into committed scratchpads: don't commit agent-to-agent status reports,
+progress logs, or coordination files to a repo unless that repo's
+deliverables explicitly require them. A repo's own `CLAUDE.local.md` may
+hold personal resume notes (CognitiveSystems' is a live example) but it is
+gitignored and personal — never canonical, never committed, never something
+another session should be expected to have read.
+
 ## CI-Bot GitHub App
 
 Privileged operations (merges, promote-branch pushes, PR creation) mint a
