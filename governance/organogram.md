@@ -148,12 +148,21 @@ repo's sibling clone (see "Resolved" #7 below).
    `.claude/agents/` (`qa-gatekeeper`) match the canonical
    `templates/D-infra-main-only/` bundle exactly. No drift, no policy
    decision needed.
+7. **Stale `opus/sonnet/opus`-style model-tier prose** — swept every prose
+   location that names a model/effort tier for an agent role (`docs/ai-
+   migration.md`, root and template `CLAUDE.md`/`README.md` files, this
+   file, `workspace/CLAUDE.md`) against each agent's own frontmatter and
+   `registry.yml`. No stale or mismatched text found anywhere — `opus` only
+   ever appears as a documented main-session escalation directive
+   (`/model opus`/`opusplan`), never as a per-agent tier claim. Already
+   aligned by the time this was checked, 2026-07-14 — no edit needed.
 
 ### Still open
 
-None outstanding from the initial audit. Remaining work (validator `--live`
-scope extension, `risk_tracks` enforcement, collision-protocol doc text,
-orchestration-package validator checks, scenario fixtures, stale
-model-tier prose cleanup, full 12-repo conformance record, and the
-human-confirmed rollout items in plan Sections 5/6/7) is tracked as ongoing
-implementation work, not as defects found by the audit.
+The remaining implementation work is: a full 12-repo conformance record
+(expected vs. actual agents/commands, routing correctness, model/tool/
+mutation-class consistency, risk-track sequencing, drift/exceptions --
+plan Section 14) and the human-confirmed rollout items in plan Sections
+5/6/7 (human GitHub team creation, CODEOWNERS rollout, live ruleset/
+security-setting changes, `sync-*.sh` script runs). Neither is a defect
+found by the audit -- both are staged, human-gated work.
