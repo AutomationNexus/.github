@@ -93,3 +93,12 @@ python scripts/validate-governance.py [--live]
 `--live` additionally cross-checks the registry against real GitHub state (default
 branches, teams, rulesets); failures there are reported as `permission-limited`, not
 errors, when the query itself is unauthorized rather than the state being wrong.
+
+Scenario fixtures assert routing, required agents, confirmation points, and expected
+artifacts for 9 realistic task shapes (trivial fix, multi-domain feature, shared-workflow
+rollout, security-sensitive change, promote, template sync, collision, permission-limited
+query, ARCRunner minimal task) against the real registry — read-only, no dispatch:
+
+```bash
+python -m unittest tests/test_governance_scenarios.py
+```
