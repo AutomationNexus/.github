@@ -239,7 +239,11 @@ repositories:
       Canonical source for workspace/ (org tier) and templates/_shared/.claude/
       (repo core). This registry lives here. architect + security-auditor roles are
       present in .claude/agents/ -- meta-repo team complete (organogram.md open items
-      #1, resolved).
+      #1, resolved). protect-master.json applied live 2026-07-14 (ruleset id
+      18944524), backed by new self-ci.yml/self-semgrep.yml caller wrappers and a
+      .yamllint config -- this repo's own PRs previously ran zero status checks
+      since ci.yml/semgrep.yml here are workflow_call-only definitions, not
+      triggered on .github itself (organogram.md open items #10, resolved).
 
   - repo: CognitiveSystems
     class: full

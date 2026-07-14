@@ -67,7 +67,7 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 
 | Repo | Class | Default branch | Team policy | Sync role | Owning team | State |
 |---|---|---|---|---|---|---|
-| `.github` | meta | `master` | meta-core | canonical-source | automationnexus-platform | needs-verification |
+| `.github` | meta | `master` | meta-core | canonical-source | automationnexus-platform | active |
 | `CognitiveSystems` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
 | `MediaRefinery` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
 | `ModelDeck` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | needs-verification |
@@ -188,18 +188,38 @@ repo's sibling clone (see "Resolved" #7 below).
    local template-repo clones fast-forwarded to `origin/main` as part of
    this fix. `registry.yml`'s group D note now documents this correction
    chain instead of repeating the error.
+10. **Human GitHub team creation, org-team-based CODEOWNERS rollout, and live
+    ruleset/security-setting changes (plan Sections 5/6/7), human-confirmed
+    2026-07-14.** All 5 org teams created (`automationnexus-owners`,
+    `automationnexus-platform`, `automationnexus-security`,
+    `automationnexus-release`, `automationnexus-app-maintainers`) with
+    per-repo permissions assigned per this file's matrix; org-team-based
+    `CODEOWNERS` rolled out to every repo (superseding the individual
+    `@t-abraham` fallback CognitiveSystems/HomeAssistant carried, and
+    MediaRefinery's inert commented-out file). Live ruleset/security changes
+    applied across the org — surfaced and closed one genuine gap in the
+    process: `.github` itself had zero live branch-protection ruleset and no
+    `protect-master.json`, because its own reusable `ci.yml`/`semgrep.yml`
+    are `workflow_call`-only definitions it never triggered on its own PRs
+    (confirmed live: `.github` PR #24 originally reported an empty
+    `statusCheckRollup`). Fixed by adding thin `self-ci.yml`/`self-semgrep.yml`
+    caller wrappers (same pattern as `ARCRunner`'s `main-only` wrapper and
+    `CognitiveSystems`'s semgrep caller) plus a `.yamllint` config (`extends:
+    relaxed`, `line-length.max: 240` — precedent: `CognitiveSystems/.yamllint`)
+    to accommodate this repo's own pre-existing long lines, then applying
+    `protect-master.json` (`.github` PR #25). Applying the new ruleset
+    retroactively blocked `.github` PR #24 (its head branch predated
+    `self-ci.yml`, so the newly-required checks structurally couldn't report)
+    — resolved by merging `master` into the PR branch so the checks would
+    run, not by bypassing the ruleset. `.github` PR #24 then merged, landing
+    this governance package on `master`.
 
 ### Still open
 
 One item remains, staged and human-gated:
 
-1. **The human-confirmed rollout items in plan Sections 5/6/7** — human
-   GitHub team creation, CODEOWNERS rollout (now planned as
-   org-team-based per the repo owner's explicit correction — not the
-   individual-fallback pattern originally proposed — beyond the 3 repos
-   that have any CODEOWNERS file today: CognitiveSystems and HomeAssistant
-   use an individual `@t-abraham` fallback, MediaRefinery's is
-   inert/fully commented out; the other 9 repos have no CODEOWNERS file
-   at all), live ruleset/security-setting changes, and
-   `sync-shared-claude.sh` runs. `sync-workspace.sh` and
-   `sync-templates.sh` are done (see item #9).
+1. **`sync-shared-claude.sh` runs** — propagates `templates/_shared/.claude/`
+   updates to the app repos via protected-branch-safe PRs to `dev`. Not yet
+   run this pass. `sync-workspace.sh` and `sync-templates.sh` are done (see
+   item #9); team creation, CODEOWNERS rollout, and ruleset/security changes
+   are done (see item #10).
