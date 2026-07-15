@@ -103,3 +103,40 @@ probe always mutates (its whole point is a write test), so it overrides `dry_run
 
 The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
 mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
+
+## Per-repo intake (`add-to-project.yml`)
+
+`org-project-sync.yml` reconciles `Status` on a schedule; it does not itself add new
+items to the Project. Item intake is either the UI-only **Auto-add to project** workflow
+toggle (see above) or, for a repo that wants intake codified as CI instead of a UI
+setting, the reusable `add-to-project.yml` workflow. It mints a CI-Bot App token scoped
+to the calling repo only (`organization-projects: write`, plus `issues: read` and
+`pull-requests: read` so the underlying action can resolve the triggering item) and adds
+the triggering issue/PR to Project #1 via `actions/add-to-project`.
+
+This is a **reference wrapper**, not an active workflow in this repo — copy it into a
+consumer repo's own `.github/workflows/` if that repo wants CI-driven intake instead of
+(or in addition to) the UI toggle:
+
+```yaml
+# .github/workflows/add-to-project.yml (consumer repo, reference only)
+on:
+  issues:
+    types: [opened, transferred]
+  pull_request:
+    types: [opened]
+
+jobs:
+  add:
+    uses: automationnexus/.github/.github/workflows/add-to-project.yml@v1
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+```
+
+A copy of this snippet also lives at
+[`templates/_shared/reference-add-to-project-caller.yml`](../templates/_shared/reference-add-to-project-caller.yml)
+for convenience — it is excluded from `scripts/sync-templates.sh`'s explicit copy list
+(see that script's per-file `copy_file`/`copy_dir` calls) and must stay that way: it is
+documentation, not a starter-bundle asset, and must never be rolled out to the 5
+`template-*` repos as a live workflow.
