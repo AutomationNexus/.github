@@ -103,3 +103,11 @@ probe always mutates (its whole point is a write test), so it overrides `dry_run
 
 The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
 mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
+
+## Area/Type auto-fill
+
+The same sweep also fills the **Area/Type** field from each linked issue/PR's labels
+(`bug`→`bug`, `enhancement`→`feature`, `documentation`→`docs`, `security`→`security`,
+`chore`→`chore`) whenever it is currently unset — it never overrides a manually-set
+value. This is an enhancement, not core: if the board has no Area/Type field, the pass
+is skipped entirely and the rest of the sync still runs normally.
