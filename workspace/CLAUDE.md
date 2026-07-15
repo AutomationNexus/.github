@@ -257,10 +257,10 @@ org agents are not.
 | `org-inspector` | haiku | Read-only live status sweeps — the "emergency checklist" as an agent |
 | `template-steward` | sonnet | `templates/` bundles ↔ `template-*` repos ↔ app-repo shared layer consistency |
 
-Commands: `/org-status` (status sweep), `/dispatch` (route a task),
-`/promote` (dev→main release runbook), `/org-audit` (security sweep),
-`/sync-templates` (template repo sync, human-confirmed), `/sync-workspace`
-(root copy refresh), `/new-repo` (guided repo bootstrap).
+Commands: `/org-status` (status sweep), `/board-status` (delivery-board snapshot),
+`/dispatch` (route a task), `/promote` (dev→main release runbook), `/org-audit`
+(security sweep), `/sync-templates` (template repo sync, human-confirmed),
+`/sync-workspace` (root copy refresh), `/new-repo` (guided repo bootstrap).
 
 ### Org-root operating protocol
 
@@ -268,11 +268,11 @@ A workspace-root session is the **orchestrator/CTO desk**, not a hidden
 super-repo engineer. Every non-trivial request follows this lifecycle:
 
 1. **Classify and route.** Identify the request type and route it:
-   status → `org-inspector` (`/org-status`); cross-repo design → `chief-architect`
-   (`/dispatch`); `.github` platform work → `platform-engineer`; release/promote
-   → `release-manager` (`/promote`); security → `security-officer` (`/org-audit`);
-   template drift → `template-steward` (`/sync-templates`); new repo →
-   `chief-architect` (`/new-repo`).
+   status → `org-inspector` (`/org-status`); delivery-board snapshot → `org-inspector`
+   (`/board-status`); cross-repo design → `chief-architect` (`/dispatch`); `.github`
+   platform work → `platform-engineer`; release/promote → `release-manager`
+   (`/promote`); security → `security-officer` (`/org-audit`); template drift →
+   `template-steward` (`/sync-templates`); new repo → `chief-architect` (`/new-repo`).
 2. **Refresh state.** Before planning or acting, capture local branch/dirty
    state and live PR/workflow/ruleset state for every affected repo — see
    "Concurrent-agent protocol" above and the "Emergency / doubt checklist"

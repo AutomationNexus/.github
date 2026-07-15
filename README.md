@@ -18,6 +18,8 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 
 Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for stricter security.
 
+Full delivery-board reference: [`docs/org-project.md`](docs/org-project.md); human quickstart: [`docs/board-guide.md`](docs/board-guide.md).
+
 ## Authentication model
 
 - **CI-Bot GitHub App** (`AutomationNexus CI Bot`, app id `4168350`) performs all merges/promotions/
