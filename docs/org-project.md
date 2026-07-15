@@ -107,19 +107,17 @@ mode. `workflow_dispatch` remains for manual dry-runs, write probes, and trouble
 ## Per-repo intake (`add-to-project.yml`)
 
 `org-project-sync.yml` reconciles `Status` on a schedule; it does not itself add new
-items to the Project. Item intake is either the UI-only **Auto-add to project** workflow
-toggle (see above) or, for a repo that wants intake codified as CI instead of a UI
-setting, the reusable `add-to-project.yml` workflow. It mints a CI-Bot App token scoped
-to the calling repo only (`organization-projects: write`, plus `issues: read` and
-`pull-requests: read` so the underlying action can resolve the triggering item) and adds
-the triggering issue/PR to Project #1 via `actions/add-to-project`.
+items to the Project. Intake is handled two ways (belt-and-suspenders): the UI-only
+**Auto-add to project** workflow toggle (see above), and the reusable
+`add-to-project.yml` workflow that each repo calls. The reusable workflow mints a
+CI-Bot App token scoped to the calling repo only (`organization-projects: write`, plus
+`issues: read` and `pull-requests: read` so `actions/add-to-project` can resolve the
+triggering item) and adds the triggering issue/PR to Project #1.
 
-This is a **reference wrapper**, not an active workflow in this repo — copy it into a
-consumer repo's own `.github/workflows/` if that repo wants CI-driven intake instead of
-(or in addition to) the UI toggle:
+Each consumer repo adds a thin caller in its own `.github/workflows/`:
 
 ```yaml
-# .github/workflows/add-to-project.yml (consumer repo, reference only)
+# .github/workflows/add-to-project.yml (consumer repo)
 on:
   issues:
     types: [opened, transferred]
@@ -134,9 +132,16 @@ jobs:
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
 ```
 
-A copy of this snippet also lives at
-[`templates/_shared/reference-add-to-project-caller.yml`](../templates/_shared/reference-add-to-project-caller.yml)
-for convenience — it is excluded from `scripts/sync-templates.sh`'s explicit copy list
-(see that script's per-file `copy_file`/`copy_dir` calls) and must stay that way: it is
-documentation, not a starter-bundle asset, and must never be rolled out to the 5
-`template-*` repos as a live workflow.
+## Area/Type auto-fill
+
+The same sweep also fills the **Area/Type** field from each linked issue/PR's labels
+(`bug`→`bug`, `enhancement`→`feature`, `documentation`→`docs`, `security`→`security`,
+`chore`→`chore`) whenever it is currently unset — it never overrides a manually-set
+value. This is an enhancement, not core: if the board has no Area/Type field, the pass
+is skipped entirely and the rest of the sync still runs normally.
+
+Coverage note: it fills Area/Type for **PRs** (all synced repos) and for **issues in
+public repos**. Issues in **private** repos (e.g. HomeAssistant) are only reachable once
+the **CI-Bot App is granted `Issues: read`** (it currently is not), so until then those
+items are left for manual triage. Granting that permission is the only step needed —
+the workflow already requests `permission-issues: read` on its token.

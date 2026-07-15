@@ -43,6 +43,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
           permission-pull-requests: read
+          permission-issues: read  # for Area/Type on private-repo issues; no-op until the CI-Bot App is granted Issues:read
           permission-contents: read
           permission-organization-projects: write
 
@@ -100,7 +101,10 @@ jobs:
             query($owner:String!,$number:Int!){
               organization(login:$owner){ projectV2(number:$number){
                 id
-                field(name:"Status"){ ... on ProjectV2SingleSelectField {
+                status: field(name:"Status"){ ... on ProjectV2SingleSelectField {
+                  id options { id name }
+                }}
+                areaType: field(name:"Area/Type"){ ... on ProjectV2SingleSelectField {
                   id options { id name }
                 }}
               }}
@@ -108,7 +112,7 @@ jobs:
           """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
           if not project:
               fail(f"Project {OWNER}#{NUMBER} was not found")
-          status = project.get("field")
+          status = project.get("status")
           if not status:
               fail(f'Project {OWNER}#{NUMBER} is missing the "Status" field')
           options = {option["name"]: option["id"] for option in status["options"]}
@@ -117,13 +121,25 @@ jobs:
           if missing:
               fail(f'Project {OWNER}#{NUMBER} Status is missing: {", ".join(missing)}')
 
-          def set_status(item_id, option_id):
+          # Area/Type auto-fill is an enhancement, not core: if the field isn't on
+          # the board, skip all Area/Type work below rather than failing the run.
+          area_type_field = project.get("areaType")
+          HAS_AREA_TYPE = bool(area_type_field)
+          area_type_options = (
+              {option["name"]: option["id"] for option in area_type_field["options"]}
+              if HAS_AREA_TYPE else {}
+          )
+
+          def set_single_select(item_id, field_id, option_id):
               graphql("""
                 mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){
                   updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,
                     fieldId:$field,value:{singleSelectOptionId:$option}}){ projectV2Item { id } }
                 }
-              """, project=project["id"], item=item_id, field=status["id"], option=option_id)
+              """, project=project["id"], item=item_id, field=field_id, option=option_id)
+
+          def set_status(item_id, option_id):
+              set_single_select(item_id, status["id"], option_id)
 
           def write_probe():
               if "Backlog" not in options:
@@ -201,6 +217,7 @@ jobs:
 
               project_items_by_url = {}
               pr_items = []
+              all_items = []
               after = None
               while True:
                   page = graphql("""
@@ -208,16 +225,25 @@ jobs:
                       organization(login:$owner){ projectV2(number:$number){
                         items(first:100, after:$after){
                           pageInfo { hasNextPage endCursor }
-                          nodes { id content { __typename ... on PullRequest {
-                              url
-                              state
-                              merged
-                              baseRefName
-                              headRefName
-                              isCrossRepository
-                              mergeCommit { oid }
-                              repository { name owner { login } }
-                            } }
+                          nodes { id content { __typename
+                              ... on PullRequest {
+                                url
+                                state
+                                merged
+                                baseRefName
+                                headRefName
+                                isCrossRepository
+                                mergeCommit { oid }
+                                repository { name owner { login } }
+                                labels(first:20){ nodes { name } }
+                              }
+                              ... on Issue {
+                                url
+                                state
+                                repository { name owner { login } }
+                                labels(first:20){ nodes { name } }
+                              }
+                            }
                             fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
                               field { ... on ProjectV2FieldCommon { id } }
                               name
@@ -245,6 +271,17 @@ jobs:
                           }
                           project_items_by_url[pr["url"]] = {"item_id": item["id"], "current_status": current}
                       pr_items.append({"item_id": item["id"], "current_status": current, "pr": pr})
+                      if HAS_AREA_TYPE and content.get("__typename") in ("PullRequest", "Issue"):
+                          current_area_type = next(
+                              (value.get("name") for value in item["fieldValues"]["nodes"]
+                               if value.get("field", {}).get("id") == area_type_field["id"]), None)
+                          labels = [label["name"] for label in (content.get("labels") or {}).get("nodes", [])]
+                          all_items.append({
+                              "item_id": item["id"],
+                              "labels": labels,
+                              "repository": content.get("repository"),
+                              "current_area_type": current_area_type,
+                          })
                   if not items["pageInfo"]["hasNextPage"]:
                       break
                   after = items["pageInfo"]["endCursor"]
@@ -257,6 +294,7 @@ jobs:
                   "non_pr_items": 0, "out_of_scope": 0, "blocked_skipped": 0,
                   "released_skipped": 0, "unclassified": 0, "manual_unknown_skipped": 0,
                   "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
+                  "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
               }
 
               release_ref_cache = {}
@@ -379,6 +417,36 @@ jobs:
                       set_status(item_id, options[target])
                       counts["updated"] += 1
 
+              # Area/Type auto-fill pass: independent of Status above, and a no-op
+              # entirely when the board has no Area/Type field. Never overrides a
+              # manually-set value; maps at most the first recognized label.
+              AREA_TYPE_LABEL_MAP = {
+                  "bug": "bug",
+                  "enhancement": "feature",
+                  "documentation": "docs",
+                  "security": "security",
+                  "chore": "chore",
+              }
+              if HAS_AREA_TYPE:
+                  for entry in all_items:
+                      if entry["current_area_type"] is not None:
+                          counts["area_type_skipped_manual"] += 1
+                          continue
+                      repo_info = entry["repository"] or {}
+                      if (repo_info.get("owner") or {}).get("login") != OWNER:
+                          continue  # out of scope; mirrors PR out-of-scope handling, not separately counted
+                      target_name = next(
+                          (AREA_TYPE_LABEL_MAP[label] for label in entry["labels"]
+                           if label in AREA_TYPE_LABEL_MAP and AREA_TYPE_LABEL_MAP[label] in area_type_options),
+                          None,
+                      )
+                      if target_name is None:
+                          counts["area_type_no_match"] += 1
+                          continue
+                      if not DRY_RUN:
+                          set_single_select(entry["item_id"], area_type_field["id"], area_type_options[target_name])
+                      counts["area_type_set"] += 1
+
               # Cross-check pass: independent open-PR REST sweep, detect-only (no
               # writes) - flags disagreement with the item-driven pass above.
               for repo in REPOS:
@@ -434,6 +502,12 @@ jobs:
                   f"- Unknown custom status (untouched): {counts['manual_unknown_skipped']}",
                   f"- Regressions suppressed (never downgraded): {counts['regressions_suppressed']}",
                   f"- Release-ref/compare errors (fail-open to On Dev): {counts['errors']}",
+                  (
+                      f"- Area/Type auto-fill: {counts['area_type_set']} set, "
+                      f"{counts['area_type_skipped_manual']} skipped (already manual), "
+                      f"{counts['area_type_no_match']} no matching label"
+                      + ("" if HAS_AREA_TYPE else " (field absent on board - skipped)")
+                  ),
                   (
                       f"- Cross-check (open-PR REST sweep, detect-only): {counts['open_prs']} open PRs / "
                       f"{counts['candidates']} candidates, {counts['skipped']} skipped/out-of-scope"
