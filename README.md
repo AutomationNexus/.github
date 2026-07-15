@@ -40,6 +40,22 @@ Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for s
   `.github/rulesets/`.
 - **Private repos** (GitHub Free can't use rulesets): CI guards + `auto-revert: true` in `ci.yml`.
 
+### This repo's own `master` merges
+
+`master` is guarded by the `protect-master` ruleset: PR required, required status checks,
+no direct push / deletion / non-fast-forward. There is **no required-approval rule** — a
+solo-owner org can't self-approve on GitHub, so review is a human responsibility, not a
+ruleset-enforced second sign-off. Policy for `.github`:
+
+- A human reviews the PR, then may click **Enable auto-merge**; GitHub merges it once the
+  required checks pass. This needs **Allow auto-merge** turned on in Settings → General →
+  Pull Requests.
+- **No bot auto-merge here.** Consumer repos use `auto-merge.yml` (CI-Bot merges `dev` PRs
+  after green); `.github` deliberately does not — it owns every shared workflow and holds
+  the CI-Bot key, so a person stays in the loop on every change to it.
+- CI-Bot never approves or merges `.github` PRs, and no agent/session may auto-approve or
+  self-merge them.
+
 ## CI/CD flow
 
 ```
