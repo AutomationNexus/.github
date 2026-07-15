@@ -429,6 +429,7 @@ jobs:
               }
               if HAS_AREA_TYPE:
                   for entry in all_items:
+                      print("AREADEBUG", entry["item_id"], entry.get("repository"), entry["labels"], entry["current_area_type"])
                       if entry["current_area_type"] is not None:
                           counts["area_type_skipped_manual"] += 1
                           continue
