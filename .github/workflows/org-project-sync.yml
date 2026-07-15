@@ -71,7 +71,14 @@ jobs:
           def graphql(query, **variables):
               command = ["gh", "api", "graphql", "-f", f"query={query}"]
               for key, value in variables.items():
-                  command += ["-F", f"{key}={value}"]
+                  if value is None:
+                      continue  # omit -> nullable GraphQL var defaults to null (e.g. first-page cursor)
+                  if isinstance(value, bool):
+                      command += ["-F", f"{key}={'true' if value else 'false'}"]
+                  elif isinstance(value, int):
+                      command += ["-F", f"{key}={value}"]  # typed, for Int! vars
+                  else:
+                      command += ["-f", f"{key}={value}"]  # raw string: IDs, cursors, titles
               result = subprocess.run(command, check=True, capture_output=True, text=True)
               payload = json.loads(result.stdout)
               if payload.get("errors"):
