@@ -43,6 +43,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
           permission-pull-requests: read
+          permission-contents: read
           permission-organization-projects: write
 
       - name: Sync org project (reconcile or write probe)
@@ -54,6 +55,7 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import re
           import subprocess
           import sys
 
@@ -110,7 +112,7 @@ jobs:
           if not status:
               fail(f'Project {OWNER}#{NUMBER} is missing the "Status" field')
           options = {option["name"]: option["id"] for option in status["options"]}
-          required = ("In Review", "Promote Pending")
+          required = ("In Review", "Promote Pending", "On Dev", "Released")
           missing = [name for name in required if name not in options]
           if missing:
               fail(f'Project {OWNER}#{NUMBER} Status is missing: {", ".join(missing)}')
@@ -188,7 +190,17 @@ jobs:
                   fail(f"Write probe verification failed: {assert_error}")
 
           def reconcile():
-              project_items = {}
+              RANK = {
+                  "Backlog": 0,
+                  "In Progress": 1,
+                  "In Review": 2,
+                  "On Dev": 3,
+                  "Promote Pending": 4,
+                  "Released": 5,
+              }
+
+              project_items_by_url = {}
+              pr_items = []
               after = None
               while True:
                   page = graphql("""
@@ -196,7 +208,16 @@ jobs:
                       organization(login:$owner){ projectV2(number:$number){
                         items(first:100, after:$after){
                           pageInfo { hasNextPage endCursor }
-                          nodes { id content { ... on PullRequest { url } }
+                          nodes { id content { __typename ... on PullRequest {
+                              url
+                              state
+                              merged
+                              baseRefName
+                              headRefName
+                              isCrossRepository
+                              mergeCommit { oid }
+                              repository { name owner { login } }
+                            } }
                             fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
                               field { ... on ProjectV2FieldCommon { id } }
                               name
@@ -208,16 +229,158 @@ jobs:
                   items = page["organization"]["projectV2"]["items"]
                   for item in items["nodes"]:
                       content = item.get("content") or {}
-                      if content.get("url"):
-                          current = next((value.get("name") for value in item["fieldValues"]["nodes"]
-                                          if value.get("field", {}).get("id") == status["id"]), None)
-                          project_items[content["url"]] = (item["id"], current)
+                      current = next((value.get("name") for value in item["fieldValues"]["nodes"]
+                                      if value.get("field", {}).get("id") == status["id"]), None)
+                      pr = None
+                      if content.get("__typename") == "PullRequest":
+                          pr = {
+                              "url": content["url"],
+                              "state": content["state"],
+                              "merged": content["merged"],
+                              "baseRefName": content["baseRefName"],
+                              "headRefName": content["headRefName"],
+                              "isCrossRepository": content["isCrossRepository"],
+                              "mergeCommit": content.get("mergeCommit"),
+                              "repository": content["repository"],
+                          }
+                          project_items_by_url[pr["url"]] = {"item_id": item["id"], "current_status": current}
+                      pr_items.append({"item_id": item["id"], "current_status": current, "pr": pr})
                   if not items["pageInfo"]["hasNextPage"]:
                       break
                   after = items["pageInfo"]["endCursor"]
 
-              counts = {"scanned": 0, "open_prs": 0, "candidates": 0, "would_update": 0,
-                        "updated": 0, "already_correct": 0, "missing_item": 0, "skipped": 0}
+              counts = {
+                  "scanned": 0, "open_prs": 0, "candidates": 0,
+                  "would_update": 0, "updated": 0, "already_correct": 0,
+                  "missing_item": 0, "skipped": 0,
+                  "in_review": 0, "promote_pending": 0, "on_dev": 0, "released": 0,
+                  "non_pr_items": 0, "out_of_scope": 0, "blocked_skipped": 0,
+                  "released_skipped": 0, "unclassified": 0, "manual_unknown_skipped": 0,
+                  "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
+              }
+
+              release_ref_cache = {}
+
+              def release_ref(repo):
+                  # Latest semver tag reachable from main (or main's HEAD sha for
+                  # HomeAssistant, which carries no vX.Y.Z tags). None if unresolved.
+                  if repo in release_ref_cache:
+                      return release_ref_cache[repo]
+                  ref = None
+                  try:
+                      if repo == "HomeAssistant":
+                          commit = gh("api", f"repos/{OWNER}/HomeAssistant/commits/main")
+                          ref = commit["sha"]
+                      else:
+                          tags = gh("api", "--paginate", f"repos/{OWNER}/{repo}/git/matching-refs/tags/v")
+                          candidates = []
+                          for entry in tags:
+                              name = entry["ref"]
+                              if name.startswith("refs/tags/"):
+                                  name = name[len("refs/tags/"):]
+                              match = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", name)
+                              if match:
+                                  candidates.append((tuple(int(part) for part in match.groups()), name))
+                          candidates.sort(key=lambda pair: pair[0], reverse=True)
+                          for _, tag_name in candidates:
+                              compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{tag_name}")
+                              if compare.get("status") in ("identical", "behind"):
+                                  ref = tag_name
+                                  break
+                  except Exception:  # noqa: BLE001 - fail-open to None, cached below
+                      ref = None
+                  release_ref_cache[repo] = ref
+                  return ref
+
+              def released_or_ondev(repo, pr):
+                  ref = release_ref(repo)
+                  merge_oid = (pr.get("mergeCommit") or {}).get("oid")
+                  if ref is None or merge_oid is None:
+                      return "On Dev"
+                  try:
+                      compare = gh("api", f"repos/{OWNER}/{repo}/compare/{ref}...{merge_oid}")
+                      if compare.get("status") in ("identical", "behind"):
+                          return "Released"
+                      return "On Dev"
+                  except Exception:  # noqa: BLE001 - fail-open, never abort the sweep
+                      counts["errors"] += 1
+                      return "On Dev"
+
+              final_status = {entry["item_id"]: entry["current_status"] for entry in pr_items}
+
+              for entry in pr_items:
+                  item_id = entry["item_id"]
+                  current = entry["current_status"]
+                  pr = entry["pr"]
+
+                  if pr is None:
+                      counts["non_pr_items"] += 1
+                      continue
+                  if current == "Released":
+                      counts["released_skipped"] += 1
+                      continue
+                  if current == "Blocked":
+                      counts["blocked_skipped"] += 1
+                      continue
+
+                  repo = pr["repository"]["name"]
+                  owner_login = pr["repository"]["owner"]["login"]
+                  if pr["isCrossRepository"] or owner_login != OWNER or repo not in REPOS:
+                      counts["out_of_scope"] += 1
+                      continue
+
+                  state = pr["state"]
+                  if state == "OPEN":
+                      if pr["baseRefName"] == "dev":
+                          target = "In Review"
+                      elif (
+                          pr["baseRefName"] == "main"
+                          and pr["headRefName"].startswith("sync/publish-main-promote-")
+                      ):
+                          target = "Promote Pending"
+                      else:
+                          counts["unclassified"] += 1
+                          continue
+                  elif state == "MERGED" and pr["baseRefName"] == "dev":
+                      target = released_or_ondev(repo, pr)
+                  else:
+                      # MERGED to a base other than dev (e.g. a completed promote PR
+                      # merged straight to main), or CLOSED unmerged - left alone.
+                      counts["unclassified"] += 1
+                      continue
+
+                  if current is None:
+                      cur_rank = -1
+                  elif current in RANK:
+                      cur_rank = RANK[current]
+                  else:
+                      counts["manual_unknown_skipped"] += 1
+                      continue
+
+                  tgt_rank = RANK[target]
+                  if tgt_rank == cur_rank:
+                      counts["already_correct"] += 1
+                      final_status[item_id] = target
+                      continue
+                  if tgt_rank < cur_rank:
+                      counts["regressions_suppressed"] += 1
+                      continue
+
+                  counts["would_update"] += 1
+                  final_status[item_id] = target
+                  bucket = {
+                      "In Review": "in_review",
+                      "Promote Pending": "promote_pending",
+                      "On Dev": "on_dev",
+                      "Released": "released",
+                  }[target]
+                  counts[bucket] += 1
+                  if not DRY_RUN:
+                      set_status(item_id, options[target])
+                      counts["updated"] += 1
+
+              # Cross-check pass: independent open-PR REST sweep, detect-only (no
+              # writes) - flags disagreement with the item-driven pass above.
               for repo in REPOS:
                   counts["scanned"] += 1
                   prs = gh("pr", "list", "--repo", f"{OWNER}/{repo}", "--state", "open",
@@ -236,36 +399,47 @@ jobs:
                           pr["baseRefName"] == "main"
                           and pr["headRefName"].startswith("sync/publish-main-promote-")
                       ):
-                          target = "Promote Pending"
+                          expected = "Promote Pending"
                       elif pr["baseRefName"] == "dev":
-                          target = "In Review"
+                          expected = "In Review"
                       else:
                           counts["skipped"] += 1
                           continue
 
                       counts["candidates"] += 1
-                      item = project_items.get(pr["url"])
+                      item = project_items_by_url.get(pr["url"])
                       if not item:
                           counts["missing_item"] += 1
                           continue
-                      if item[1] == target:
-                          counts["already_correct"] += 1
-                          continue
-                      counts["would_update"] += 1
-                      if not DRY_RUN:
-                          set_status(item[0], options[target])
-                          counts["updated"] += 1
+                      if final_status.get(item["item_id"]) != expected:
+                          counts["cross_check_mismatch"] += 1
 
               mode = "dry run" if DRY_RUN else "mutation"
               write_summary([
                   f"### Org Project Sync ({mode})",
                   f"- Scanned repositories: {counts['scanned']}",
-                  f"- Open PRs / candidates: {counts['open_prs']} / {counts['candidates']}",
                   f"- Would update: {counts['would_update']}",
                   f"- Actual updated: {counts['updated']}",
                   f"- Already correct: {counts['already_correct']}",
-                  f"- Missing Project item: {counts['missing_item']}",
-                  f"- Skipped/out-of-scope: {counts['skipped']}",
+                  (
+                      f"- Target buckets: In Review {counts['in_review']}, "
+                      f"Promote Pending {counts['promote_pending']}, "
+                      f"On Dev {counts['on_dev']}, Released {counts['released']}"
+                  ),
+                  f"- Non-PR items: {counts['non_pr_items']}",
+                  f"- Out-of-scope PR items: {counts['out_of_scope']}",
+                  f"- Blocked (untouched): {counts['blocked_skipped']}",
+                  f"- Already Released (untouched): {counts['released_skipped']}",
+                  f"- Unclassified (untouched): {counts['unclassified']}",
+                  f"- Unknown custom status (untouched): {counts['manual_unknown_skipped']}",
+                  f"- Regressions suppressed (never downgraded): {counts['regressions_suppressed']}",
+                  f"- Release-ref/compare errors (fail-open to On Dev): {counts['errors']}",
+                  (
+                      f"- Cross-check (open-PR REST sweep, detect-only): {counts['open_prs']} open PRs / "
+                      f"{counts['candidates']} candidates, {counts['skipped']} skipped/out-of-scope"
+                  ),
+                  f"- Cross-check missing Project item: {counts['missing_item']}",
+                  f"- Cross-check mismatches vs. item-driven pass: {counts['cross_check_mismatch']}",
               ])
 
           if WRITE_PROBE:

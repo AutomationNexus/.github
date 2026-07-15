@@ -13,7 +13,7 @@ Issues and PRs from every repo into one board / table / roadmap.
 | Layer | Owned by | Notes |
 |-------|----------|-------|
 | Custom fields + Status stages | `scripts/bootstrap-org-project.sh` | Idempotent; re-runnable source of truth for the board's shape |
-| Items (Status of open PRs) | `.github/workflows/org-project-sync.yml` | Manual-dispatch until the App permission below is granted |
+| Items (Status of open and merged PRs) | `.github/workflows/org-project-sync.yml` | Runs hourly (cron `:17`) plus manual dispatch |
 | Item intake | Per-repo **auto-add** workflow | UI-only toggle (see below) |
 | Saved views, native **Iteration** field | Humans, in the UI | The GitHub API cannot create these |
 
@@ -53,7 +53,32 @@ then set grouping/filter via the view's **⋯** menu.
 `org-project-sync.yml` reads PRs with a scoped CI-Bot App token and writes org-Project
 fields; `GITHUB_TOKEN` is retained with `contents: read` but cannot write org Projects.
 The App token is restricted to `CognitiveSystems`, `MediaRefinery`, `ModelDeck`, `Uploadarr`,
-and `HomeAssistant`, with only pull-requests read and organization-projects write.
+and `HomeAssistant`, with pull-requests read, contents read, and organization-projects
+write. The `contents: read` grant (added alongside the On Dev/Released reconciliation
+below) is read-only widening for the REST tag-listing and compare calls; it does not
+add any new write scope.
+
+The sweep is item-driven: for every Project item linked to a pull request in scope
+(same-org, non-cross-repository, one of the five synced repos) it classifies the PR's
+GraphQL `state`/`baseRefName`/`headRefName` into `In Review`, `Promote Pending`, `On
+Dev`, or `Released`. `On Dev` vs. `Released` for a PR merged to `dev` is resolved by
+comparing its merge commit against the newest semantic-version tag reachable from
+`main` (or `main`'s HEAD sha for `HomeAssistant`, which has no version tags) via the
+GitHub compare API; a merge commit at or behind that ref is `Released`, otherwise `On
+Dev`. Status only ever advances forward through `Backlog → In Progress → In Review →
+On Dev → Promote Pending → Released` — the sweep never downgrades a status and never
+touches `Blocked` or items already `Released` (both are treated as manual-only). A
+pull request that is merged directly into `main` (for example, a completed promote
+PR) is deliberately left unclassified: its `dev`-side item already advances to
+`Released` once that same merge commit is reachable from the release ref, so no
+separate `main`-merge transition is needed. Any REST/compare error for a given PR
+fails open to `On Dev` and is counted, rather than aborting the sweep.
+
+The previous open-PR REST sweep still runs, but only as an independent, detect-only
+cross-check now: it flags a `cross_check_mismatch` when its own `In
+Review`/`Promote Pending` expectation disagrees with what the item-driven pass
+concluded, but it no longer writes Project fields itself.
+
 Before it will run:
 
 1. Grant the **CI-Bot GitHub App** the org permission
@@ -63,8 +88,8 @@ Before it will run:
    selected organization secrets. These uppercase stored names may be mapped to lowercase
    reusable-workflow aliases by callers; they refer to the same credentials.
 3. Run **Org Project Sync** manually with `dry_run: true` first. Manual dry runs never
-   mutate Project items; set `dry_run: false` only after reviewing the summary. A future
-   schedule event uses mutation mode automatically. The summary reports scanned repos,
+   mutate Project items; set `dry_run: false` only after reviewing the summary. The hourly
+   schedule event runs in mutation mode automatically. The summary reports scanned repos,
    up to 1,000 open PRs/candidates per repository, would-update, actual updated,
    already-correct, missing Project item, and skipped/out-of-scope counts. The workflow
    skips cross-repository or non-`AutomationNexus` PRs. It does not post comments.
@@ -76,4 +101,5 @@ a temporary draft item, sets and verifies its Status, then deletes it — and sk
 reconciliation sweep entirely; use it to confirm write access before a real run. The
 probe always mutates (its whole point is a write test), so it overrides `dry_run`.
 
-The `schedule:` block remains commented out until the operator explicitly enables it.
+The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
+mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
