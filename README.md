@@ -21,9 +21,16 @@ Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for s
 
 - **CI-Bot GitHub App** (`AutomationNexus CI Bot`, app id `4168350`) performs all merges/promotions/
   cross-repo syncs. App-token pushes cascade to downstream workflows (unlike `GITHUB_TOKEN`).
-  Every consumer repo stores `CI_BOT_APP_ID` + `CI_BOT_APP_PRIVATE_KEY` as repo secrets and the App
-  must be installed on the repo.
-- **No PATs.** The old `REPO_DISPATCH_PAT` is fully removed.
+  Stored secret names are uppercase: `CI_BOT_APP_ID` + `CI_BOT_APP_PRIVATE_KEY`. Reusable workflow
+  callers may expose them through lowercase aliases such as `ci-bot-app-id` and
+  `ci-bot-app-private-key`; those aliases are not different credentials. Credentials may be
+  repository secrets on `.github` or selected organization secrets, and the App must be installed
+  on every repository it accesses.
+- **No PATs.** The old `REPO_DISPATCH_PAT` is fully removed. Scope App tokens to the repositories
+  and permissions required by the job; revoke the old key and rotate by updating the secret value
+  locally, then verify a dry run before enabling mutations. The project sync requests up to 1,000
+  open PRs per repository and ignores cross-repository or non-`AutomationNexus` PRs. Never print
+  or commit secret values.
 - **PyPI**: token-based (`PYPI_API_TOKEN`) because PyPI OIDC trusted publishing rejects reusable
   workflows. Docker/GHCR uses the built-in `GITHUB_TOKEN`.
 
