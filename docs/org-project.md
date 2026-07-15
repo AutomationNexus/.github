@@ -104,6 +104,34 @@ probe always mutates (its whole point is a write test), so it overrides `dry_run
 The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
 mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
 
+## Per-repo intake (`add-to-project.yml`)
+
+`org-project-sync.yml` reconciles `Status` on a schedule; it does not itself add new
+items to the Project. Intake is handled two ways (belt-and-suspenders): the UI-only
+**Auto-add to project** workflow toggle (see above), and the reusable
+`add-to-project.yml` workflow that each repo calls. The reusable workflow mints a
+CI-Bot App token scoped to the calling repo only (`organization-projects: write`, plus
+`issues: read` and `pull-requests: read` so `actions/add-to-project` can resolve the
+triggering item) and adds the triggering issue/PR to Project #1.
+
+Each consumer repo adds a thin caller in its own `.github/workflows/`:
+
+```yaml
+# .github/workflows/add-to-project.yml (consumer repo)
+on:
+  issues:
+    types: [opened, transferred]
+  pull_request:
+    types: [opened]
+
+jobs:
+  add:
+    uses: automationnexus/.github/.github/workflows/add-to-project.yml@v1
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+```
+
 ## Area/Type auto-fill
 
 The same sweep also fills the **Area/Type** field from each linked issue/PR's labels
