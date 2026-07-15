@@ -47,8 +47,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.ci-bot-app-id }}
-          private-key: ${{ secrets.ci-bot-app-private-key }}
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
       - name: Reconcile item Status from open PRs
