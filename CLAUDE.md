@@ -117,3 +117,6 @@ Two separate propagation scripts serve different protection models:
   is used directly against Anthropic; there is no proxy/router in the standard workflow.
 - Do not commit real values for `CI_BOT_APP_PRIVATE_KEY`, `PYPI_API_TOKEN`, or any
   `.env`-style secret in any template or script.
+- Do not auto-approve or self-merge `.github` PRs from any agent or session. This
+  meta-repo's `master` merges are human-gated: a person reviews, then merges (or enables
+  GitHub-native auto-merge). See README → "This repo's own `master` merges".
