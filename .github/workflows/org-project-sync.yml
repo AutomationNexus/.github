@@ -1,30 +1,21 @@
-# Org Project sync -- reconcile the Status of items on the org-wide
-# "AutomationNexus — Delivery" Project (org project #1) from live PR state.
-#
-# WHAT IT DOES (bounded, deterministic): for each dev/main app repo it reads open
-# PRs and sets the matching Project item's Status to the derivable stage:
-#   - PR head branch begins with `sync/publish-main-promote-`  -> "Promote Pending"
-#   - PR base branch is `dev`                                  -> "In Review"
-# It touches ONLY those two transitions. Backlog/In Progress/On Dev/Released are
-# left to the built-in add/close automations and to humans -- this job never
-# downgrades or guesses a stage it cannot prove from branch names.
-#
-# DEPENDENCY (must be granted before this can run):
-#   GITHUB_TOKEN cannot write org Projects. This job mints a CI-Bot App token, so
-#   the CI-Bot GitHub App must be granted org permission `organization_projects:
-#   write` (Settings -> GitHub Apps -> CI-Bot -> Permissions). Until then a manual
-#   run will fail on the first GraphQL write -- that is expected.
-#
-# Left as manual `workflow_dispatch` on purpose: verify one manual run end-to-end
-# after the permission grant, THEN uncomment the schedule block below to make it
-# hands-off.
+# Org-wide delivery board sync for open PRs in the supported repositories.
 name: Org Project Sync
 
 on:
   workflow_dispatch:
-  # Enable only after a manual run is verified and the App permission is granted:
+    inputs:
+      dry_run:
+        description: Report planned changes without updating Project items
+        required: true
+        type: boolean
+        default: true
+      write_probe:
+        description: Run only a write-permission probe (create/verify/delete a draft item); skips the reconciliation sweep
+        required: true
+        type: boolean
+        default: false
   # schedule:
-  #   - cron: "17 * * * *"   # hourly, offset off the top of the hour
+  #   - cron: "17 * * * *"
 
 permissions:
   contents: read
@@ -36,12 +27,12 @@ concurrency:
 env:
   PROJECT_NUMBER: "1"
   OWNER: AutomationNexus
-  # dev/main repos that have a promote flow; the rest have no dev stage to track.
   REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Mint CI-Bot App token
         id: app-token
@@ -50,88 +41,228 @@ jobs:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
+          permission-pull-requests: read
+          permission-organization-projects: write
 
-      - name: Reconcile item Status from open PRs
+      - name: Sync org project (reconcile or write probe)
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          WRITE_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.write_probe || false }}
         run: |
           python3 - <<'PY'
-          import json, os, subprocess
+          import json
+          import os
+          import subprocess
+          import sys
 
           OWNER = os.environ["OWNER"]
           NUMBER = int(os.environ["PROJECT_NUMBER"])
           REPOS = os.environ["REPOS"].split()
+          DRY_RUN = os.environ["DRY_RUN"].lower() == "true"
+          WRITE_PROBE = os.environ["WRITE_PROBE"].lower() == "true"
 
-          def gh(*args, **kw):
-              return subprocess.run(["gh", *args], check=True, capture_output=True,
-                                    text=True, **kw).stdout
+          def gh(*args):
+              return json.loads(subprocess.run(
+                  ["gh", *args], check=True, capture_output=True, text=True
+              ).stdout)
 
-          def graphql(query, **vars):
-              cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
-              for k, v in vars.items():
-                  cmd += ["-F", f"{k}={v}"]
-              return json.loads(subprocess.run(cmd, check=True, capture_output=True,
-                                               text=True).stdout)
+          def graphql(query, **variables):
+              command = ["gh", "api", "graphql", "-f", f"query={query}"]
+              for key, value in variables.items():
+                  command += ["-F", f"{key}={value}"]
+              result = subprocess.run(command, check=True, capture_output=True, text=True)
+              payload = json.loads(result.stdout)
+              if payload.get("errors"):
+                  raise RuntimeError("; ".join(error["message"] for error in payload["errors"]))
+              return payload["data"]
 
-          # 1. Resolve project id, Status field id, and option name -> id.
-          proj = graphql('''
+          def fail(message):
+              print(f"ERROR: {message}", file=sys.stderr)
+              raise SystemExit(1)
+
+          def write_summary(lines):
+              print("\n".join(lines))
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+                  handle.write("\n".join(lines) + "\n")
+
+          project = graphql("""
             query($owner:String!,$number:Int!){
               organization(login:$owner){ projectV2(number:$number){
                 id
                 field(name:"Status"){ ... on ProjectV2SingleSelectField {
-                  id options { id name } } }
-              }}}''', owner=OWNER, number=NUMBER)["data"]["organization"]["projectV2"]
-          project_id = proj["id"]
-          status_field = proj["field"]["id"]
-          opt = {o["name"]: o["id"] for o in proj["field"]["options"]}
-
-          # 2. Map each project item's linked-PR URL -> item id (paged).
-          pr_item = {}
-          after = "null"
-          while True:
-              page = graphql('''
-                query($owner:String!,$number:Int!,$after:String){
-                  organization(login:$owner){ projectV2(number:$number){
-                    items(first:100, after:$after){
-                      pageInfo{ hasNextPage endCursor }
-                      nodes{ id content{ ... on PullRequest { url } } }
-                    }}}}''', owner=OWNER, number=NUMBER, after=after)
-              items = page["data"]["organization"]["projectV2"]["items"]
-              for n in items["nodes"]:
-                  url = (n.get("content") or {}).get("url")
-                  if url:
-                      pr_item[url] = n["id"]
-              if not items["pageInfo"]["hasNextPage"]:
-                  break
-              after = items["pageInfo"]["endCursor"]
+                  id options { id name }
+                }}
+              }}
+            }
+          """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
+          if not project:
+              fail(f"Project {OWNER}#{NUMBER} was not found")
+          status = project.get("field")
+          if not status:
+              fail(f'Project {OWNER}#{NUMBER} is missing the "Status" field')
+          options = {option["name"]: option["id"] for option in status["options"]}
+          required = ("In Review", "Promote Pending")
+          missing = [name for name in required if name not in options]
+          if missing:
+              fail(f'Project {OWNER}#{NUMBER} Status is missing: {", ".join(missing)}')
 
           def set_status(item_id, option_id):
-              graphql('''
-                mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
-                  updateProjectV2ItemFieldValue(input:{
-                    projectId:$p, itemId:$i, fieldId:$f,
-                    value:{ singleSelectOptionId:$o }}){ projectV2Item { id } }}''',
-                p=project_id, i=item_id, f=status_field, o=option_id)
+              graphql("""
+                mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){
+                  updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,
+                    fieldId:$field,value:{singleSelectOptionId:$option}}){ projectV2Item { id } }
+                }
+              """, project=project["id"], item=item_id, field=status["id"], option=option_id)
 
-          changed = 0
-          for repo in REPOS:
-              prs = json.loads(gh("pr", "list", "--repo", f"{OWNER}/{repo}",
-                                  "--state", "open", "--json",
-                                  "url,headRefName,baseRefName"))
-              for pr in prs:
-                  if pr["headRefName"].startswith("sync/publish-main-promote-"):
-                      target = "Promote Pending"
-                  elif pr["baseRefName"] == "dev":
-                      target = "In Review"
+          def write_probe():
+              if "Backlog" not in options:
+                  fail(f'Project {OWNER}#{NUMBER} Status is missing "Backlog", required for the write probe')
+
+              run_id = os.environ.get("GITHUB_RUN_ID", "local")
+              title = f"[probe] org-project-sync write test {run_id}"
+              created = graphql("""
+                mutation($project:ID!,$title:String!){
+                  addProjectV2DraftIssue(input:{projectId:$project, title:$title}){
+                    projectItem { id }
+                  }
+                }
+              """, project=project["id"], title=title)
+              item_id = created["addProjectV2DraftIssue"]["projectItem"]["id"]
+
+              verified = False
+              assert_error = None
+              try:
+                  set_status(item_id, options["Backlog"])
+                  readback = graphql("""
+                    query($id:ID!){
+                      node(id:$id){
+                        ... on ProjectV2Item {
+                          fieldValueByName(name:"Status"){
+                            ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          }
+                        }
+                      }
+                    }
+                  """, id=item_id)
+                  observed = ((readback.get("node") or {}).get("fieldValueByName") or {}).get("name")
+                  if observed == "Backlog":
+                      verified = True
                   else:
-                      continue
-                  item_id = pr_item.get(pr["url"])
-                  if not item_id:
-                      # Not yet added by auto-add; skip -- auto-add will pick it up.
-                      continue
-                  set_status(item_id, opt[target])
-                  changed += 1
-                  print(f"{repo}: {pr['url']} -> {target}")
+                      assert_error = f"expected Status=Backlog, observed {observed!r}"
+              except Exception as exc:  # noqa: BLE001 - always fall through to cleanup below
+                  assert_error = str(exc)
+              finally:
+                  deleted = False
+                  try:
+                      graphql("""
+                        mutation($project:ID!,$item:ID!){
+                          deleteProjectV2Item(input:{projectId:$project, itemId:$item}){ deletedItemId }
+                        }
+                      """, project=project["id"], item=item_id)
+                      deleted = True
+                  except Exception as exc:  # noqa: BLE001 - report clearly, handled below
+                      print(f"ERROR: write probe failed to delete probe item {item_id}: {exc}",
+                            file=sys.stderr)
 
-          print(f"Updated {changed} item(s).")
+              outcome = "pass" if verified and deleted else "fail"
+              write_summary([
+                  "### Org Project Sync (write probe)",
+                  f"- Probe item created: {item_id}",
+                  f"- Status verified: {'yes' if verified else 'no'}",
+                  f"- Probe item deleted: {'yes' if deleted else 'no'}",
+                  f"- Result: {outcome}",
+              ])
+
+              if not deleted:
+                  fail(f"Write probe cleanup failed to delete item {item_id}")
+              if not verified:
+                  fail(f"Write probe verification failed: {assert_error}")
+
+          def reconcile():
+              project_items = {}
+              after = None
+              while True:
+                  page = graphql("""
+                    query($owner:String!,$number:Int!,$after:String){
+                      organization(login:$owner){ projectV2(number:$number){
+                        items(first:100, after:$after){
+                          pageInfo { hasNextPage endCursor }
+                          nodes { id content { ... on PullRequest { url } }
+                            fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
+                              field { ... on ProjectV2FieldCommon { id } }
+                              name
+                            }}}}
+                        }
+                      }}
+                    }
+                  """, owner=OWNER, number=NUMBER, after=after)
+                  items = page["organization"]["projectV2"]["items"]
+                  for item in items["nodes"]:
+                      content = item.get("content") or {}
+                      if content.get("url"):
+                          current = next((value.get("name") for value in item["fieldValues"]["nodes"]
+                                          if value.get("field", {}).get("id") == status["id"]), None)
+                          project_items[content["url"]] = (item["id"], current)
+                  if not items["pageInfo"]["hasNextPage"]:
+                      break
+                  after = items["pageInfo"]["endCursor"]
+
+              counts = {"scanned": 0, "open_prs": 0, "candidates": 0, "would_update": 0,
+                        "updated": 0, "already_correct": 0, "missing_item": 0, "skipped": 0}
+              for repo in REPOS:
+                  counts["scanned"] += 1
+                  prs = gh("pr", "list", "--repo", f"{OWNER}/{repo}", "--state", "open",
+                           "--limit", "1000", "--json",
+                           "url,headRefName,baseRefName,isCrossRepository,headRepositoryOwner")
+                  counts["open_prs"] += len(prs)
+                  for pr in prs:
+                      same_trusted_repo = (
+                          not pr["isCrossRepository"]
+                          and (pr.get("headRepositoryOwner") or {}).get("login") == OWNER
+                      )
+                      if not same_trusted_repo:
+                          counts["skipped"] += 1
+                          continue
+                      if (
+                          pr["baseRefName"] == "main"
+                          and pr["headRefName"].startswith("sync/publish-main-promote-")
+                      ):
+                          target = "Promote Pending"
+                      elif pr["baseRefName"] == "dev":
+                          target = "In Review"
+                      else:
+                          counts["skipped"] += 1
+                          continue
+
+                      counts["candidates"] += 1
+                      item = project_items.get(pr["url"])
+                      if not item:
+                          counts["missing_item"] += 1
+                          continue
+                      if item[1] == target:
+                          counts["already_correct"] += 1
+                          continue
+                      counts["would_update"] += 1
+                      if not DRY_RUN:
+                          set_status(item[0], options[target])
+                          counts["updated"] += 1
+
+              mode = "dry run" if DRY_RUN else "mutation"
+              write_summary([
+                  f"### Org Project Sync ({mode})",
+                  f"- Scanned repositories: {counts['scanned']}",
+                  f"- Open PRs / candidates: {counts['open_prs']} / {counts['candidates']}",
+                  f"- Would update: {counts['would_update']}",
+                  f"- Actual updated: {counts['updated']}",
+                  f"- Already correct: {counts['already_correct']}",
+                  f"- Missing Project item: {counts['missing_item']}",
+                  f"- Skipped/out-of-scope: {counts['skipped']}",
+              ])
+
+          if WRITE_PROBE:
+              write_probe()
+          else:
+              reconcile()
           PY

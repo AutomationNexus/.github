@@ -45,17 +45,35 @@ then set grouping/filter via the view's **⋯** menu.
 
 - **Auto-add to project** — enable one per repo (filter `is:issue,pr is:open`), for all 12 repos.
 - **Item added → Status: Backlog**
-- **Item closed → Status: Released** *(note: also fires for feature PRs merged into `dev`; the sync workflow corrects those on its next run)*
+- **Item closed → Status: Released** is intentionally not enabled: closing a feature PR merged into `dev` does not mean the change was released to `main`.
 - **Auto-archive items** — archived after e.g. 30 days closed.
 
 ## Enabling the automated sync
 
-`org-project-sync.yml` writes org-Project fields from Actions, which
-`GITHUB_TOKEN` cannot do. Before it will run:
+`org-project-sync.yml` reads PRs with a scoped CI-Bot App token and writes org-Project
+fields; `GITHUB_TOKEN` is retained with `contents: read` but cannot write org Projects.
+The App token is restricted to `CognitiveSystems`, `MediaRefinery`, `ModelDeck`, `Uploadarr`,
+and `HomeAssistant`, with only pull-requests read and organization-projects write.
+Before it will run:
 
 1. Grant the **CI-Bot GitHub App** the org permission
    `organization_projects: write` (Settings → GitHub Apps → CI-Bot → Permissions),
    and accept the permission update for the org install.
-2. Trigger one manual run (Actions → **Org Project Sync** → Run workflow) and
-   confirm it updates Status without error.
-3. Uncomment the `schedule:` block in the workflow to make it hands-off.
+2. Store `CI_BOT_APP_ID` and `CI_BOT_APP_PRIVATE_KEY` as repo secrets on `.github` or as
+   selected organization secrets. These uppercase stored names may be mapped to lowercase
+   reusable-workflow aliases by callers; they refer to the same credentials.
+3. Run **Org Project Sync** manually with `dry_run: true` first. Manual dry runs never
+   mutate Project items; set `dry_run: false` only after reviewing the summary. A future
+   schedule event uses mutation mode automatically. The summary reports scanned repos,
+   up to 1,000 open PRs/candidates per repository, would-update, actual updated,
+   already-correct, missing Project item, and skipped/out-of-scope counts. The workflow
+   skips cross-repository or non-`AutomationNexus` PRs. It does not post comments.
+4. Rotate or revoke credentials by revoking the old App key, replacing the local secret
+   value, and repeating the dry run. Never print or commit secret values.
+
+A manual `write_probe: true` dispatch runs only a self-contained write test — it creates
+a temporary draft item, sets and verifies its Status, then deletes it — and skips the
+reconciliation sweep entirely; use it to confirm write access before a real run. The
+probe always mutates (its whole point is a write test), so it overrides `dry_run`.
+
+The `schedule:` block remains commented out until the operator explicitly enables it.
