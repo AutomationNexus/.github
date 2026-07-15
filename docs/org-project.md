@@ -156,3 +156,12 @@ public repos**. Issues in **private** repos (e.g. HomeAssistant) are only reacha
 the **CI-Bot App is granted `Issues: read`** (it currently is not), so until then those
 items are left for manual triage. Granting that permission is the only step needed —
 the workflow already requests `permission-issues: read` on its token.
+
+## Weekly digest
+
+`.github/workflows/board-digest.yml` runs Monday mornings (cron `23 8 * * 1`, plus
+manual dispatch) and finds-or-creates a single `.github` tracking issue titled
+"📊 Delivery digest," replacing its body each run with current Status/Track counts,
+in-flight item ages, at-risk items, and releases from the last 7 days. It never
+opens a second issue — the stable title is the lookup key — and it reads the board
+with a read-only CI-Bot App token while writing the issue with `GITHUB_TOKEN`.

@@ -1,0 +1,334 @@
+# Weekly delivery-board digest: maintains a single tracking issue in .github
+# summarizing org Project #1 (status counts, in-flight ages, at-risk items,
+# and releases from the last 7 days). Not a reusable workflow - like
+# org-project-sync.yml, this is a standalone scheduled workflow that lives
+# only in this repo.
+name: Board Digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 8 * * 1"
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: board-digest
+  cancel-in-progress: false
+
+env:
+  PROJECT_NUMBER: "1"
+  OWNER: AutomationNexus
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint CI-Bot App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
+          permission-organization-projects: read
+          permission-pull-requests: read
+          permission-issues: read
+          permission-contents: read
+
+      - name: Build and post digest
+        env:
+          # Board/PR/release reads (CI-Bot App token, read-only, scoped to
+          # the 5 synced repos - see mint step above).
+          BOT_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Tracking-issue write in THIS repo only (.github) - the default
+          # GITHUB_TOKEN, scoped by the workflow-level `issues: write`
+          # permission above. Kept separate from BOT_TOKEN so the multi-repo
+          # App token never needs write scope, and the write-capable token
+          # never needs cross-repo reach.
+          GH_TOKEN_ISSUE: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import subprocess
+          import sys
+          import tempfile
+
+          OWNER = os.environ["OWNER"]
+          NUMBER = int(os.environ["PROJECT_NUMBER"])
+          REPOS = os.environ["REPOS"].split()
+          BOT_TOKEN = os.environ["BOT_TOKEN"]
+          ISSUE_TOKEN = os.environ["GH_TOKEN_ISSUE"]
+
+          # Stable tracking-issue title: used to find-or-create a single issue below.
+          # Never change this string without also updating any saved search/link that
+          # depends on it. Escaped (not a literal emoji) to keep this file plain ASCII,
+          # matching the rest of this repo's workflow files.
+          TITLE = "\U0001F4CA Delivery digest"
+
+          STATUSES = ["Backlog", "In Progress", "In Review", "On Dev", "Promote Pending", "Released", "Blocked"]
+
+          def _run(token, args):
+              # The token lives only in the subprocess env for this one call, never in
+              # argv or anything we print - so it can never leak via a stray print(),
+              # a raised exception's repr, or gh's own error output.
+              env = dict(os.environ)
+              env["GH_TOKEN"] = token
+              result = subprocess.run(["gh", *args], check=True, capture_output=True, text=True, env=env)
+              return result.stdout.strip()
+
+          def bot_gh(*args):
+              # Board/PR/release reads only - CI-Bot App token, read-only, scoped to
+              # the 5 synced repos plus org Projects read. Never used for writes.
+              return _run(BOT_TOKEN, args)
+
+          def issue_gh(*args):
+              # Tracking-issue writes only - default GITHUB_TOKEN, scoped to this repo
+              # (.github) with the workflow-level issues: write permission. Never used
+              # for cross-repo reads.
+              return _run(ISSUE_TOKEN, args)
+
+          def bot_graphql(query, **variables):
+              command = ["api", "graphql", "-f", f"query={query}"]
+              for key, value in variables.items():
+                  if value is None:
+                      continue  # omit -> nullable GraphQL var defaults to null (e.g. first-page cursor)
+                  if isinstance(value, bool):
+                      command += ["-F", f"{key}={'true' if value else 'false'}"]
+                  elif isinstance(value, int):
+                      command += ["-F", f"{key}={value}"]  # typed, for Int! vars
+                  else:
+                      command += ["-f", f"{key}={value}"]  # raw string: IDs, cursors, titles
+              payload = json.loads(bot_gh(*command))
+              if payload.get("errors"):
+                  raise RuntimeError("; ".join(error["message"] for error in payload["errors"]))
+              return payload["data"]
+
+          def fail(message):
+              print(f"ERROR: {message}", file=sys.stderr)
+              raise SystemExit(1)
+
+          def write_summary(lines):
+              print("\n".join(lines))
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+                  handle.write("\n".join(lines) + "\n")
+
+          def parse_ts(value):
+              if not value:
+                  return None
+              try:
+                  return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+              except ValueError:
+                  return None
+
+          project = bot_graphql("""
+            query($owner:String!,$number:Int!){
+              organization(login:$owner){ projectV2(number:$number){
+                id
+                status: field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } }
+                track: field(name:"Track"){ ... on ProjectV2SingleSelectField { id options { id name } } }
+              }}
+            }
+          """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
+          if not project:
+              fail(f"Project {OWNER}#{NUMBER} was not found")
+          status_field = project.get("status")
+          if not status_field:
+              fail(f'Project {OWNER}#{NUMBER} is missing the "Status" field')
+          track_field = project.get("track")
+          HAS_TRACK = bool(track_field)
+
+          # Item sweep: mirrors org-project-sync.yml's paginated items() query shape
+          # (first:100, fieldValues resolved by field id) - read-only here, so no
+          # item id / labels / mergeCommit are fetched, only what the digest needs.
+          items = []
+          after = None
+          while True:
+              page = bot_graphql("""
+                query($owner:String!,$number:Int!,$after:String){
+                  organization(login:$owner){ projectV2(number:$number){
+                    items(first:100, after:$after){
+                      pageInfo { hasNextPage endCursor }
+                      nodes { content { __typename
+                          ... on PullRequest {
+                            url number state baseRefName headRefName createdAt mergedAt
+                            repository { name }
+                          }
+                          ... on Issue {
+                            url number state createdAt
+                            repository { name }
+                          }
+                        }
+                        fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
+                          field { ... on ProjectV2FieldCommon { id } }
+                          name
+                        }}}}
+                    }
+                  }}
+                }
+              """, owner=OWNER, number=NUMBER, after=after)
+              page_items = page["organization"]["projectV2"]["items"]
+              for node in page_items["nodes"]:
+                  content = node.get("content") or {}
+                  current_status = next(
+                      (value.get("name") for value in node["fieldValues"]["nodes"]
+                       if value.get("field", {}).get("id") == status_field["id"]), None)
+                  current_track = (
+                      next((value.get("name") for value in node["fieldValues"]["nodes"]
+                            if value.get("field", {}).get("id") == track_field["id"]), None)
+                      if HAS_TRACK else None
+                  )
+                  # Deliberately never keep content["url"] / any title text below - only
+                  # repo + number ever reach the digest markdown, to avoid rendering
+                  # attacker-influenced (e.g. an external contributor's PR title)
+                  # markdown/links inside a body we post to a real tracking issue.
+                  items.append({
+                      "number": content.get("number"),
+                      "repo": (content.get("repository") or {}).get("name"),
+                      "createdAt": content.get("createdAt"),
+                      "mergedAt": content.get("mergedAt"),
+                      "status": current_status,
+                      "track": current_track,
+                  })
+              if not page_items["pageInfo"]["hasNextPage"]:
+                  break
+              after = page_items["pageInfo"]["endCursor"]
+
+          now = datetime.datetime.now(datetime.timezone.utc)
+          monday = (now - datetime.timedelta(days=now.weekday())).date()
+
+          status_counts = {name: 0 for name in STATUSES}
+          repo_counts = {}
+          in_flight = []
+          at_risk = []
+
+          for entry in items:
+              status = entry["status"]
+              if status in status_counts:
+                  status_counts[status] += 1
+              repo = entry["repo"]
+              if repo:
+                  repo_counts[repo] = repo_counts.get(repo, 0) + 1
+              if status in ("In Review", "On Dev", "Promote Pending") and repo and entry["number"] is not None:
+                  if status == "On Dev":
+                      reference = parse_ts(entry["mergedAt"]) or parse_ts(entry["createdAt"])
+                  else:
+                      reference = parse_ts(entry["createdAt"])
+                  label = f"{repo}#{entry['number']}"
+                  if reference is not None:
+                      label += f" ({(now - reference).days}d)"
+                  in_flight.append((status, label))
+              if entry["track"] in ("At risk", "Off track") and repo and entry["number"] is not None:
+                  at_risk.append(f"{repo}#{entry['number']}")
+
+          IN_FLIGHT_ORDER = {"In Review": 0, "On Dev": 1, "Promote Pending": 2}
+          in_flight.sort(key=lambda pair: IN_FLIGHT_ORDER.get(pair[0], 99))
+          in_flight_labels = [label for _, label in in_flight]
+
+          # Released-in-last-7-days: per-repo REST fetch, never allowed to abort the
+          # digest - a repo with zero releases, or a transient API hiccup, just
+          # contributes nothing to this section instead of failing the whole run.
+          released_last_7d = []
+          for repo in REPOS:
+              try:
+                  raw = bot_gh(
+                      "api", f"repos/{OWNER}/{repo}/releases",
+                      "--jq", "[.[] | {tag_name, published_at}]",
+                  )
+                  releases = json.loads(raw) if raw else []
+              except Exception as exc:  # noqa: BLE001 - fail-open per repo, never abort the digest
+                  print(f"WARNING: could not fetch releases for {repo}: {exc}", file=sys.stderr)
+                  releases = []
+              for release in releases:
+                  published = parse_ts(release.get("published_at"))
+                  if published is not None and (now - published) <= datetime.timedelta(days=7):
+                      tag = release.get("tag_name") or "(untagged)"
+                      # Tag names are git ref names (no spaces/most punctuation) set by
+                      # repo maintainers, not free text from external contributors -
+                      # much lower injection surface than a PR/issue title, but still
+                      # repo-controlled content, so keep it plain text, never a link.
+                      released_last_7d.append(f"{repo} {tag}")
+
+          def bullet_list(values):
+              return "\n".join(f"- {value}" for value in values) if values else "none"
+
+          status_line = " \u00b7 ".join(f"{name}: {status_counts[name]}" for name in STATUSES)
+          repo_line = (
+              " \u00b7 ".join(f"{repo}: {repo_counts.get(repo, 0)}" for repo in REPOS)
+              if REPOS else "none"
+          )
+
+          lines = [
+              f"## \U0001F4CA Delivery digest \u2014 week of {monday.isoformat()}",
+              "",
+              f"**Status counts:** {status_line}",
+              "",
+              "### Released last 7d",
+              bullet_list(released_last_7d),
+              "",
+              "### In flight",
+              bullet_list(in_flight_labels),
+              "",
+              "### At risk",
+              bullet_list(at_risk),
+              "",
+              "### By repo",
+              repo_line,
+              "",
+              "_Auto-generated by board-digest.yml; updated weekly._",
+          ]
+          body = "\n".join(lines) + "\n"
+
+          write_summary(lines)
+
+          tmp_path = None
+          try:
+              with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as handle:
+                  handle.write(body)
+                  tmp_path = handle.name
+
+              # Find by exact title via the REST issue list (immediately consistent),
+              # NOT --search (search index lags creation and could double-create on a
+              # rapid second run). Match the title in Python.
+              listed = issue_gh(
+                  "issue", "list",
+                  "--repo", f"{OWNER}/.github",
+                  "--state", "all",
+                  "--limit", "500",
+                  "--json", "number,title",
+              )
+              issue_number = next(
+                  (row["number"] for row in json.loads(listed or "[]")
+                   if row.get("title") == TITLE),
+                  None,
+              )
+
+              if issue_number is not None:
+                  issue_gh(
+                      "issue", "edit", str(issue_number),
+                      "--repo", f"{OWNER}/.github",
+                      "--body-file", tmp_path,
+                  )
+                  issue_url = f"https://github.com/{OWNER}/.github/issues/{issue_number}"
+              else:
+                  create_output = issue_gh(
+                      "issue", "create",
+                      "--repo", f"{OWNER}/.github",
+                      "--title", TITLE,
+                      "--body-file", tmp_path,
+                  )
+                  issue_url = create_output or f"https://github.com/{OWNER}/.github/issues"
+          finally:
+              if tmp_path is not None:
+                  os.remove(tmp_path)
+
+          # Only ever the issue URL - never BOT_TOKEN, ISSUE_TOKEN, or any other secret.
+          print(f"Tracking issue: {issue_url}")
+          PY
