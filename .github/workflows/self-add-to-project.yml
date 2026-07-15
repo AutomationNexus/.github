@@ -1,0 +1,15 @@
+# Adds newly-opened issues in this meta-repo to the org delivery board (Project #1).
+# Issues-only on purpose: .github's PR volume is platform/infra churn, not delivery
+# items, so PRs are left off the board here (consumer repos add both).
+name: Add to project (self)
+
+on:
+  issues:
+    types: [opened, transferred]
+
+jobs:
+  add:
+    uses: ./.github/workflows/add-to-project.yml
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
