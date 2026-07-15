@@ -16,8 +16,7 @@
 |---|----------|----------|
 | 1 | Are `CLAUDE.md` / `.claude/` committed to `main`? | **No — dev-only.** Committed on `dev`, stripped from `main` by `.github/dev-only-paths` (same mechanism as `DEVELOPMENT.md`). `main` stays a lean public artifact. |
 | 2 | Fate of retired AI-tooling machinery? | **Deleted in the same PR that adds the Claude Code files** for that repo. No parallel-tool period, no archive copies — git history preserves everything. |
-| 3 | `better-ccflare` (Claude/Anthropic proxy fork) | **Archived entirely**, not migrated. It is a standalone tool, not part of this org's dev workflow. See "better-ccflare" below. |
-| 4 | Model tiering | **Current standard:** leads (`architect`, `security-auditor`, org leads) use `sonnet` + `effort: high`; implementation/review uses `sonnet`; mechanical QA/inspection uses `haiku`. Deep escalation stays in the main session (`/model opus` or `opusplan`), not a dedicated agent. |
+| 3 | Model tiering | **Current standard:** leads (`architect`, `security-auditor`, org leads) use `sonnet` + `effort: high`; implementation/review uses `sonnet`; mechanical QA/inspection uses `haiku`. Deep escalation stays in the main session (`/model opus` or `opusplan`), not a dedicated agent. |
 
 ## Model tier mapping (org-wide default)
 
@@ -80,36 +79,6 @@ not a nested subagent spawn.
 | `HomeAssistant` | ✅ merged | [PR #43](https://github.com/AutomationNexus/HomeAssistant/pull/43). Most complex: 8 agents, 8 commands, full permission denylist. **Found and fixed a real CI-breaking bug**: `tools/check_repo_hygiene.py` hard-failed if `CLAUDE.md`/`.claude/` were tracked at all — fixed and verified |
 | `ARCRunner` | ✅ merged | [PR #10](https://github.com/AutomationNexus/ARCRunner/pull/10). **Main-only exception applied**: `CLAUDE.md`/`.claude/` committed directly on `main`. Minimal surface — only `qa-gatekeeper` (haiku) |
 | `template-python-docker` / `-pypi` / `-docker-ha-addon` / `-infra-main-only` / `-ha-config` | ✅ done | Regenerated via `scripts/sync-templates.sh` (run with Git Bash — WSL's `bash` on PATH doesn't have `gh`) and pushed directly to `main` on all 5 `AutomationNexus/template-*` repos. Stale retired AI-tool files (not deleted by the sync script, a documented limitation) manually removed from all 5 via a separate clone+push. Verified: each repo's `main` has no retired AI-tool paths and has `CLAUDE.md`. |
-| `better-ccflare` | ⚠️ blocked | Not migrated by design (out of scope). **Archival could not be completed**: the repo `tombii/better-ccflare` is owned by a different GitHub account than the one authenticated for this migration (`t-abraham`, read-only access — `pull: true, push: false, admin: false`). Archiving or editing the README requires the repo owner's own action. |
-
-## better-ccflare — archival notes
-
-`better-ccflare` is a standalone open-source project (a Claude/Anthropic account
-load-balancer), not an internal dev tool, so it is **archived rather than migrated**:
-
-1. Settle any open PRs/issues you care about preserving.
-2. Add a short archival notice to `README.md` (fork status, pointer to upstream
-   `snipeship/ccflare` or wherever you want users redirected).
-3. Archive the GitHub repo: `gh repo archive tombii/better-ccflare` (or via repo settings).
-4. **Machine cleanup** (not a repo change): make sure no local environment still points
-   `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` at a better-ccflare instance, and stop/remove
-   any running instance (systemd unit, Docker container). Claude Code should talk to
-   Anthropic directly with your own account — no proxy in the standard workflow.
-
-**Status: steps 1–3 not executed** — the authenticated `gh` account for this migration
-(`t-abraham`) has only read access to `tombii/better-ccflare` (not admin/push), so it
-cannot archive the repo or push a README change. This needs to be done by whoever has
-admin rights on that repo (log in as `tombii`, or ask them to run the archive step).
-Step 4 was checked on this machine: no `better-ccflare` process, listening port
-(8080/8081/8082/8889), Windows service, or `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`
-env var was found — nothing to decommission locally.
-
-## Local app uninstall — explicitly deferred
-
-The operator asked to **not** uninstall the local legacy app/package/config during this pass.
-All of it remains installed and untouched on this machine. If it is uninstalled later,
-also revoke any related OAuth grant from the Anthropic account security page if full
-deprovisioning is ever wanted.
 
 ## Lessons learned during rollout (check these in every remaining repo)
 
