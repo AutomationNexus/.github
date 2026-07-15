@@ -1,0 +1,137 @@
+# Org Project sync -- reconcile the Status of items on the org-wide
+# "AutomationNexus — Delivery" Project (org project #1) from live PR state.
+#
+# WHAT IT DOES (bounded, deterministic): for each dev/main app repo it reads open
+# PRs and sets the matching Project item's Status to the derivable stage:
+#   - PR head branch begins with `sync/publish-main-promote-`  -> "Promote Pending"
+#   - PR base branch is `dev`                                  -> "In Review"
+# It touches ONLY those two transitions. Backlog/In Progress/On Dev/Released are
+# left to the built-in add/close automations and to humans -- this job never
+# downgrades or guesses a stage it cannot prove from branch names.
+#
+# DEPENDENCY (must be granted before this can run):
+#   GITHUB_TOKEN cannot write org Projects. This job mints a CI-Bot App token, so
+#   the CI-Bot GitHub App must be granted org permission `organization_projects:
+#   write` (Settings -> GitHub Apps -> CI-Bot -> Permissions). Until then a manual
+#   run will fail on the first GraphQL write -- that is expected.
+#
+# Left as manual `workflow_dispatch` on purpose: verify one manual run end-to-end
+# after the permission grant, THEN uncomment the schedule block below to make it
+# hands-off.
+name: Org Project Sync
+
+on:
+  workflow_dispatch:
+  # Enable only after a manual run is verified and the App permission is granted:
+  # schedule:
+  #   - cron: "17 * * * *"   # hourly, offset off the top of the hour
+
+permissions:
+  contents: read
+
+concurrency:
+  group: org-project-sync
+  cancel-in-progress: false
+
+env:
+  PROJECT_NUMBER: "1"
+  OWNER: AutomationNexus
+  # dev/main repos that have a promote flow; the rest have no dev stage to track.
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint CI-Bot App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Reconcile item Status from open PRs
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          OWNER = os.environ["OWNER"]
+          NUMBER = int(os.environ["PROJECT_NUMBER"])
+          REPOS = os.environ["REPOS"].split()
+
+          def gh(*args, **kw):
+              return subprocess.run(["gh", *args], check=True, capture_output=True,
+                                    text=True, **kw).stdout
+
+          def graphql(query, **vars):
+              cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
+              for k, v in vars.items():
+                  cmd += ["-F", f"{k}={v}"]
+              return json.loads(subprocess.run(cmd, check=True, capture_output=True,
+                                               text=True).stdout)
+
+          # 1. Resolve project id, Status field id, and option name -> id.
+          proj = graphql('''
+            query($owner:String!,$number:Int!){
+              organization(login:$owner){ projectV2(number:$number){
+                id
+                field(name:"Status"){ ... on ProjectV2SingleSelectField {
+                  id options { id name } } }
+              }}}''', owner=OWNER, number=NUMBER)["data"]["organization"]["projectV2"]
+          project_id = proj["id"]
+          status_field = proj["field"]["id"]
+          opt = {o["name"]: o["id"] for o in proj["field"]["options"]}
+
+          # 2. Map each project item's linked-PR URL -> item id (paged).
+          pr_item = {}
+          after = "null"
+          while True:
+              page = graphql('''
+                query($owner:String!,$number:Int!,$after:String){
+                  organization(login:$owner){ projectV2(number:$number){
+                    items(first:100, after:$after){
+                      pageInfo{ hasNextPage endCursor }
+                      nodes{ id content{ ... on PullRequest { url } } }
+                    }}}}''', owner=OWNER, number=NUMBER, after=after)
+              items = page["data"]["organization"]["projectV2"]["items"]
+              for n in items["nodes"]:
+                  url = (n.get("content") or {}).get("url")
+                  if url:
+                      pr_item[url] = n["id"]
+              if not items["pageInfo"]["hasNextPage"]:
+                  break
+              after = items["pageInfo"]["endCursor"]
+
+          def set_status(item_id, option_id):
+              graphql('''
+                mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+                  updateProjectV2ItemFieldValue(input:{
+                    projectId:$p, itemId:$i, fieldId:$f,
+                    value:{ singleSelectOptionId:$o }}){ projectV2Item { id } }}''',
+                p=project_id, i=item_id, f=status_field, o=option_id)
+
+          changed = 0
+          for repo in REPOS:
+              prs = json.loads(gh("pr", "list", "--repo", f"{OWNER}/{repo}",
+                                  "--state", "open", "--json",
+                                  "url,headRefName,baseRefName"))
+              for pr in prs:
+                  if pr["headRefName"].startswith("sync/publish-main-promote-"):
+                      target = "Promote Pending"
+                  elif pr["baseRefName"] == "dev":
+                      target = "In Review"
+                  else:
+                      continue
+                  item_id = pr_item.get(pr["url"])
+                  if not item_id:
+                      # Not yet added by auto-add; skip -- auto-add will pick it up.
+                      continue
+                  set_status(item_id, opt[target])
+                  changed += 1
+                  print(f"{repo}: {pr['url']} -> {target}")
+
+          print(f"Updated {changed} item(s).")
+          PY
