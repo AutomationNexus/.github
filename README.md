@@ -14,6 +14,7 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 | `release-pypi.yml` | Tag (from pyproject) → build wheel → PyPI upload (token) → Release | `has-frontend`, `tag_name` · secret: `pypi-api-token` |
 | `semgrep.yml` | SAST scan | none |
 | `docs.yml` | MkDocs Material → GitHub Pages | none |
+| `add-to-project.yml` | Adds the triggering issue/PR to the org delivery Project (event-driven intake; complements `org-project-sync.yml`'s scheduled reconciliation) | `project-url` (default `https://github.com/orgs/AutomationNexus/projects/1`) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 
 Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for stricter security.
 
