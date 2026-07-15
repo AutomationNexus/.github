@@ -43,10 +43,12 @@ then set grouping/filter via the view's **⋯** menu.
 
 ## Workflow toggles (UI, Project → ⋯ → Workflows)
 
-- **Auto-add to project** — enable one per repo (filter `is:issue,pr is:open`), for all 12 repos.
-- **Item added → Status: Backlog**
+Two of these are already handled in code and are **optional** as UI toggles:
+
+- **Auto-add to project** — *(optional; covered by the `add-to-project.yml` caller in every repo)* enable per repo as a UI backstop if desired (filter `is:issue,pr is:open`).
+- **Item added → Status: Backlog** — *(optional; the hourly sync now defaults any status-less item to Backlog)* enable in the UI too if you want it to happen instantly rather than on the next sync.
 - **Item closed → Status: Released** is intentionally not enabled: closing a feature PR merged into `dev` does not mean the change was released to `main`.
-- **Auto-archive items** — archived after e.g. 30 days closed.
+- **Auto-archive items** — *(UI-only; no API)* archived after e.g. 30 days closed.
 
 ## Enabling the automated sync
 
