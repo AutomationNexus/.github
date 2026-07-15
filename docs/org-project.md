@@ -111,3 +111,9 @@ The same sweep also fills the **Area/Type** field from each linked issue/PR's la
 `chore`→`chore`) whenever it is currently unset — it never overrides a manually-set
 value. This is an enhancement, not core: if the board has no Area/Type field, the pass
 is skipped entirely and the rest of the sync still runs normally.
+
+Coverage note: it fills Area/Type for **PRs** (all synced repos) and for **issues in
+public repos**. Issues in **private** repos (e.g. HomeAssistant) are only reachable once
+the **CI-Bot App is granted `Issues: read`** (it currently is not), so until then those
+items are left for manual triage. Granting that permission is the only step needed —
+the workflow already requests `permission-issues: read` on its token.
