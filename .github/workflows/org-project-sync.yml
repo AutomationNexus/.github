@@ -295,6 +295,7 @@ jobs:
                   "released_skipped": 0, "unclassified": 0, "manual_unknown_skipped": 0,
                   "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
                   "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
+                  "backlog_defaulted": 0,
               }
 
               release_ref_cache = {}
@@ -353,6 +354,12 @@ jobs:
 
                   if pr is None:
                       counts["non_pr_items"] += 1
+                      # Item-added -> Backlog: default a status-less item (e.g. a freshly
+                      # auto-added issue) to Backlog. Never overrides an existing status.
+                      if current is None and "Backlog" in options:
+                          if not DRY_RUN:
+                              set_status(item_id, options["Backlog"])
+                          counts["backlog_defaulted"] += 1
                       continue
                   if current == "Released":
                       counts["released_skipped"] += 1
@@ -495,6 +502,7 @@ jobs:
                       f"On Dev {counts['on_dev']}, Released {counts['released']}"
                   ),
                   f"- Non-PR items: {counts['non_pr_items']}",
+                  f"- Defaulted to Backlog (item-added): {counts['backlog_defaulted']}",
                   f"- Out-of-scope PR items: {counts['out_of_scope']}",
                   f"- Blocked (untouched): {counts['blocked_skipped']}",
                   f"- Already Released (untouched): {counts['released_skipped']}",
