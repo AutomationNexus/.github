@@ -132,6 +132,12 @@ org_commands:
     entry_conditions: Current org state needed, something looks broken, before acting on any PR/branch/workflow.
     outputs: [status-table]
 
+  - name: /board-status
+    owner: org-inspector
+    confirmation_class: read-only
+    entry_conditions: Delivery-board snapshot needed (Status/Repository/at-risk/in-flight counts), distinct from repo/CI state.
+    outputs: [board-summary]
+
   - name: /org-audit
     owner: security-officer
     confirmation_class: read-only

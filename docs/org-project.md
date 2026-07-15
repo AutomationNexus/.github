@@ -1,5 +1,8 @@
 # Org-wide delivery board (GitHub Project)
 
+> Looking for a human "how do I use this board" quickstart instead of the
+> field/automation reference below? See [`board-guide.md`](board-guide.md).
+
 `AutomationNexus — Delivery` is the single org-level Project v2 that aggregates
 Issues and PRs from every repo into one board / table / roadmap.
 

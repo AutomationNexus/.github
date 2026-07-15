@@ -109,6 +109,7 @@ repo's sibling clone (see "Resolved" #7 below).
 | Task type | Route to | Command |
 |---|---|---|
 | Current org state / "is something broken?" | `org-inspector` | `/org-status` |
+| Delivery-board snapshot (Status/Repository/at-risk/in-flight counts) | `org-inspector` | `/board-status` |
 | Cross-repo design / multi-repo planning | `chief-architect` | `/dispatch` |
 | `.github` platform work (workflows, templates, rulesets, scripts) | `platform-engineer` | direct session in `.github`, or `/dispatch` |
 | Release / promote | `release-manager` | `/promote` (human-confirmed) |
