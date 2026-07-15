@@ -54,6 +54,7 @@ jobs:
           WRITE_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.write_probe || false }}
         run: |
           python3 - <<'PY'
+          import datetime
           import json
           import os
           import re
@@ -107,6 +108,9 @@ jobs:
                 areaType: field(name:"Area/Type"){ ... on ProjectV2SingleSelectField {
                   id options { id name }
                 }}
+                track: field(name:"Track"){ ... on ProjectV2SingleSelectField {
+                  id options { id name }
+                }}
               }}
             }
           """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
@@ -128,6 +132,16 @@ jobs:
           area_type_options = (
               {option["name"]: option["id"] for option in area_type_field["options"]}
               if HAS_AREA_TYPE else {}
+          )
+
+          # Track staleness auto-flagging is an enhancement, not core: if the
+          # field isn't on the board, skip all Track work below rather than
+          # failing the run.
+          track_field = project.get("track")
+          HAS_TRACK = bool(track_field)
+          track_options = (
+              {option["name"]: option["id"] for option in track_field["options"]}
+              if HAS_TRACK else {}
           )
 
           def set_single_select(item_id, field_id, option_id):
@@ -230,6 +244,8 @@ jobs:
                                 url
                                 state
                                 merged
+                                createdAt
+                                mergedAt
                                 baseRefName
                                 headRefName
                                 isCrossRepository
@@ -257,12 +273,19 @@ jobs:
                       content = item.get("content") or {}
                       current = next((value.get("name") for value in item["fieldValues"]["nodes"]
                                       if value.get("field", {}).get("id") == status["id"]), None)
+                      current_track = (
+                          next((value.get("name") for value in item["fieldValues"]["nodes"]
+                                if value.get("field", {}).get("id") == track_field["id"]), None)
+                          if HAS_TRACK else None
+                      )
                       pr = None
                       if content.get("__typename") == "PullRequest":
                           pr = {
                               "url": content["url"],
                               "state": content["state"],
                               "merged": content["merged"],
+                              "createdAt": content.get("createdAt"),
+                              "mergedAt": content.get("mergedAt"),
                               "baseRefName": content["baseRefName"],
                               "headRefName": content["headRefName"],
                               "isCrossRepository": content["isCrossRepository"],
@@ -270,7 +293,12 @@ jobs:
                               "repository": content["repository"],
                           }
                           project_items_by_url[pr["url"]] = {"item_id": item["id"], "current_status": current}
-                      pr_items.append({"item_id": item["id"], "current_status": current, "pr": pr})
+                      pr_items.append({
+                          "item_id": item["id"],
+                          "current_status": current,
+                          "pr": pr,
+                          "current_track": current_track,
+                      })
                       if HAS_AREA_TYPE and content.get("__typename") in ("PullRequest", "Issue"):
                           current_area_type = next(
                               (value.get("name") for value in item["fieldValues"]["nodes"]
@@ -295,7 +323,7 @@ jobs:
                   "released_skipped": 0, "unclassified": 0, "manual_unknown_skipped": 0,
                   "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
                   "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
-                  "backlog_defaulted": 0,
+                  "backlog_defaulted": 0, "track_at_risk_set": 0,
               }
 
               release_ref_cache = {}
@@ -393,6 +421,43 @@ jobs:
                       # merged straight to main), or CLOSED unmerged - left alone.
                       counts["unclassified"] += 1
                       continue
+
+                  # Staleness auto-flagging (Track field): independent of the Status
+                  # write below and of the rank/regression logic that follows - it
+                  # only ever nudges Track from unset/"On track" to "At risk", never
+                  # touches "Off track" or a manually-set "At risk", and never sets
+                  # "On track". A malformed/absent timestamp just skips staleness for
+                  # this item rather than raising.
+                  stale = False
+                  try:
+                      now = datetime.datetime.now(datetime.timezone.utc)
+                      if target == "In Review":
+                          created_at = pr.get("createdAt")
+                          if created_at is not None:
+                              created = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                              stale = (now - created) > datetime.timedelta(days=7)
+                      elif target == "Promote Pending":
+                          created_at = pr.get("createdAt")
+                          if created_at is not None:
+                              created = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                              stale = (now - created) > datetime.timedelta(days=3)
+                      elif target == "On Dev":
+                          merged_at = pr.get("mergedAt")
+                          if merged_at is not None:
+                              merged = datetime.datetime.fromisoformat(merged_at.replace("Z", "+00:00"))
+                              stale = (now - merged) > datetime.timedelta(days=5)
+                  except Exception:  # noqa: BLE001 - malformed/absent timestamp: skip, never crash
+                      stale = False
+
+                  if (
+                      stale
+                      and HAS_TRACK
+                      and entry["current_track"] in (None, "On track")
+                      and "At risk" in track_options
+                  ):
+                      if not DRY_RUN:
+                          set_single_select(item_id, track_field["id"], track_options["At risk"])
+                      counts["track_at_risk_set"] += 1
 
                   if current is None:
                       cur_rank = -1
@@ -516,6 +581,7 @@ jobs:
                       f"{counts['area_type_no_match']} no matching label"
                       + ("" if HAS_AREA_TYPE else " (field absent on board - skipped)")
                   ),
+                  f"- Flagged At risk (stale): {counts['track_at_risk_set']}",
                   (
                       f"- Cross-check (open-PR REST sweep, detect-only): {counts['open_prs']} open PRs / "
                       f"{counts['candidates']} candidates, {counts['skipped']} skipped/out-of-scope"

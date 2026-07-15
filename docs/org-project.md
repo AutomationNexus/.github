@@ -106,6 +106,15 @@ probe always mutates (its whole point is a write test), so it overrides `dry_run
 The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
 mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
 
+## Staleness -> At risk
+
+The same sweep flags stale in-scope PR items by setting **Track** to `At risk`:
+`In Review` past 7 days (from PR `createdAt`), `Promote Pending` past 3 days (from
+PR `createdAt`), `On Dev` past 5 days (from PR `mergedAt`). It only touches items
+whose Track is unset or already `On track` — it never overrides a manually-set
+`Off track` or `At risk`, and it never sets `On track`. This is optional: if the
+board has no Track field, the pass is skipped entirely.
+
 ## Per-repo intake (`add-to-project.yml`)
 
 `org-project-sync.yml` reconciles `Status` on a schedule; it does not itself add new
