@@ -27,7 +27,7 @@ concurrency:
 env:
   PROJECT_NUMBER: "1"
   OWNER: AutomationNexus
-  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant ARCRunner"
 
 jobs:
   sync:
@@ -41,7 +41,7 @@ jobs:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant,ARCRunner
           permission-pull-requests: read
           permission-issues: read  # for Area/Type on private-repo issues; no-op until the CI-Bot App is granted Issues:read
           permission-contents: read
@@ -64,6 +64,12 @@ jobs:
           OWNER = os.environ["OWNER"]
           NUMBER = int(os.environ["PROJECT_NUMBER"])
           REPOS = os.environ["REPOS"].split()
+          # Main-only repos (no dev branch - e.g. ARCRunner, which just builds a
+          # runner image and merges feature branches straight to main). A small
+          # explicit set, rather than inferring "no dev base ever seen" from the
+          # data - that heuristic would misclassify a real dev/main repo that
+          # simply has no recent dev-PR activity in the current items page.
+          MAIN_ONLY_REPOS = {"ARCRunner"}
           DRY_RUN = os.environ["DRY_RUN"].lower() == "true"
           WRITE_PROBE = os.environ["WRITE_PROBE"].lower() == "true"
 
@@ -97,6 +103,16 @@ jobs:
               print("\n".join(lines))
               with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
                   handle.write("\n".join(lines) + "\n")
+
+          def is_delivery_digest_issue(issue):
+              # The board-digest.yml workflow's single rolling tracking issue
+              # (title "\U0001F4CA Delivery digest", lives in .github) is a
+              # perpetual auto-managed meta-issue, not a real deliverable - it
+              # must never be swept to Done even if it's ever closed/reopened.
+              if issue is None:
+                  return False
+              title = (issue.get("title") or "").lower()
+              return "delivery digest" in title
 
           project = graphql("""
             query($owner:String!,$number:Int!){
@@ -143,6 +159,14 @@ jobs:
               {option["name"]: option["id"] for option in track_field["options"]}
               if HAS_TRACK else {}
           )
+
+          # Closed-issue -> Done reconciliation is an enhancement, not core: if
+          # the "Done" Status option isn't on the board yet, skip this feature
+          # entirely rather than failing the run (same pattern as Area/Type and
+          # Track above). Done is just another option on the existing Status
+          # field, not a separate field, so this reads from `options` rather
+          # than querying a dedicated field like areaType/track above.
+          HAS_DONE = "Done" in options
 
           def set_single_select(item_id, field_id, option_id):
               graphql("""
@@ -256,6 +280,7 @@ jobs:
                               ... on Issue {
                                 url
                                 state
+                                title
                                 repository { name owner { login } }
                                 labels(first:20){ nodes { name } }
                               }
@@ -279,6 +304,7 @@ jobs:
                           if HAS_TRACK else None
                       )
                       pr = None
+                      issue = None
                       if content.get("__typename") == "PullRequest":
                           pr = {
                               "url": content["url"],
@@ -293,10 +319,18 @@ jobs:
                               "repository": content["repository"],
                           }
                           project_items_by_url[pr["url"]] = {"item_id": item["id"], "current_status": current}
+                      elif content.get("__typename") == "Issue":
+                          issue = {
+                              "url": content["url"],
+                              "state": content["state"],
+                              "title": content.get("title"),
+                              "repository": content["repository"],
+                          }
                       pr_items.append({
                           "item_id": item["id"],
                           "current_status": current,
                           "pr": pr,
+                          "issue": issue,
                           "current_track": current_track,
                       })
                       if HAS_AREA_TYPE and content.get("__typename") in ("PullRequest", "Issue"):
@@ -325,6 +359,7 @@ jobs:
                   "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
                   "backlog_defaulted": 0, "track_at_risk_set": 0,
                   "ref_resolution_errors": 0, "promote_pending_finalized": 0,
+                  "main_only_released": 0, "done_finalized": 0,
               }
 
               release_ref_cache = {}
@@ -380,6 +415,26 @@ jobs:
 
                   if pr is None:
                       counts["non_pr_items"] += 1
+                      issue = entry.get("issue")
+                      # Closed-issue -> Done: a closed Issue content item is a
+                      # completed deliverable and shouldn't linger in
+                      # Backlog/In Progress/etc forever. Only CLOSED issues are
+                      # affected (open status-less issues still default to
+                      # Backlog below); never downgrades an item already at
+                      # Done or Released; and explicitly skips the perpetual
+                      # board-digest.yml tracking issue, which is never a real
+                      # deliverable even if it's ever closed.
+                      if (
+                          HAS_DONE
+                          and issue is not None
+                          and issue["state"] == "CLOSED"
+                          and current not in ("Done", "Released")
+                          and not is_delivery_digest_issue(issue)
+                      ):
+                          if not DRY_RUN:
+                              set_status(item_id, options["Done"])
+                          counts["done_finalized"] += 1
+                          continue
                       # Item-added -> Backlog: default a status-less item (e.g. a freshly
                       # auto-added issue) to Backlog. Never overrides an existing status.
                       if current is None and "Backlog" in options:
@@ -414,20 +469,31 @@ jobs:
                           continue
                   elif state == "MERGED" and pr["baseRefName"] == "dev":
                       target = released_or_ondev(repo, pr)
-                  elif (
-                      state == "MERGED"
-                      and pr["baseRefName"] == "main"
-                      and pr["headRefName"].startswith("sync/publish-main-promote-")
-                  ):
-                      # A promote PR just landed on main: the board item was
-                      # "Promote Pending" (or possibly stuck at an earlier rank) and
-                      # needs a terminal status rather than staying stranded forever.
-                      # Released is rank 5 (highest), so this can never be suppressed
-                      # by the regression guard below regardless of current rank.
-                      target = "Released"
-                      counts["promote_pending_finalized"] += 1
+                  elif state == "MERGED" and pr["baseRefName"] == "main":
+                      if pr["headRefName"].startswith("sync/publish-main-"):
+                          # A promote-branch (sync/publish-main-promote-*) or any
+                          # other publish-flow branch (e.g. ModelDeck's nightly
+                          # add-on-only sync/publish-main-<version>, or a
+                          # pin-sync push) just landed on main: the board item
+                          # needs a terminal status rather than staying stranded
+                          # forever. Released is rank 5 (highest), so this can
+                          # never be suppressed by the regression guard below
+                          # regardless of current rank. Deliberately broader
+                          # than just the "-promote-" prefix - see gap-2 notes.
+                          target = "Released"
+                          counts["promote_pending_finalized"] += 1
+                      elif repo in MAIN_ONLY_REPOS:
+                          # Main-only repos (no dev branch - e.g. ARCRunner)
+                          # merge ordinary feature branches straight to main;
+                          # that merge IS the release, there's no separate
+                          # promote/publish step to wait for.
+                          target = "Released"
+                          counts["main_only_released"] += 1
+                      else:
+                          counts["unclassified"] += 1
+                          continue
                   else:
-                      # MERGED to a base other than dev/main-promote, or CLOSED
+                      # MERGED to a base other than dev/main, or CLOSED
                       # unmerged - left alone.
                       counts["unclassified"] += 1
                       continue
@@ -578,11 +644,16 @@ jobs:
                   ),
                   f"- Non-PR items: {counts['non_pr_items']}",
                   f"- Defaulted to Backlog (item-added): {counts['backlog_defaulted']}",
+                  (
+                      f"- Closed issues finalized to Done: {counts['done_finalized']}"
+                      + ("" if HAS_DONE else " (Done option absent on board - skipped)")
+                  ),
                   f"- Out-of-scope PR items: {counts['out_of_scope']}",
                   f"- Blocked (untouched): {counts['blocked_skipped']}",
                   f"- Already Released (untouched): {counts['released_skipped']}",
-                  f"- Promote PRs finalized to Released (merged sync/publish-main-promote-* -> main): "
+                  f"- Promote/publish PRs finalized to Released (merged sync/publish-main-* -> main): "
                   f"{counts['promote_pending_finalized']}",
+                  f"- Main-only repo feature merges finalized to Released: {counts['main_only_released']}",
                   f"- Unclassified (untouched): {counts['unclassified']}",
                   f"- Unknown custom status (untouched): {counts['manual_unknown_skipped']}",
                   f"- Regressions suppressed (never downgraded): {counts['regressions_suppressed']}",
