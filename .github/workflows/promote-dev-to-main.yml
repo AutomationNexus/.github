@@ -37,6 +37,17 @@ on:
         required: false
         default: 'patch'
         type: string
+      version-file:
+        description: >-
+          Bare X.Y.Z file (e.g. VERSION) to bump instead of pyproject.toml, for a repo with
+          no pyproject.toml to version. Leave empty (default) to keep bumping
+          pyproject.toml's [project].version unchanged. When set, the same bump-type math
+          (including the patch wrap-at-99 rule) applies to this file instead, and the file
+          is created with the computed version if it doesn't already exist -- no manual
+          seeding required.
+        required: false
+        default: ""
+        type: string
     secrets:
       ci-bot-app-id:
         required: true
@@ -120,6 +131,7 @@ jobs:
           EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
           STRIP_DEV_ONLY_PATHS: ${{ inputs.strip-dev-only-paths }}
           BUMP_TYPE: ${{ inputs.bump-type }}
+          VERSION_FILE: ${{ inputs.version-file }}
           PROMOTION_TOOLS_DIR: .promotion-workflow-tools-${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -160,7 +172,8 @@ jobs:
                 --dev-ref origin/dev \
                 --exclude-paths "${EXCLUDE_PATHS}" \
                 --strip-dev-only-paths "${STRIP_DEV_ONLY_PATHS}" \
-                --bump-type "${BUMP_TYPE}")
+                --bump-type "${BUMP_TYPE}" \
+                --version-file "${VERSION_FILE}")
               if [ -n "${NEW_VERSION}" ]; then
                 echo "Bumping version to ${NEW_VERSION}"
               fi

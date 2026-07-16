@@ -87,24 +87,42 @@ consumer repo. Precedent inputs: `build-args`, `main-source-allow-glob`,
 `patch` (default) / `minor` / `major`. It computes the next `X.Y.Z`:
 
 - Source of truth = the latest `vX.Y.Z` git tag reachable on `main` (fallback:
-  `main`'s current `pyproject.toml` version; fallback `0.0.0` for a first-ever
-  release).
+  the repo's version source below; fallback `0.0.0` for a first-ever release).
 - **patch**: `Z += 1`, wrapping — once `Z` would exceed `99`, `Y += 1` and
   `Z` resets to `1`.
 - **minor**: `Y += 1`, `Z` resets to `1`.
 - **major**: `X += 1`, `Y` and `Z` reset to `1`.
 
-The computed version is written to `pyproject.toml` on the promote branch as
-part of the reconciliation commit, and the promote PR title gets a
-`(Minor)`/`(Major)` suffix for visibility (the dispatch input, not the title
-text, is what actually drives the bump). **Never hand-edit a version in
-`pyproject.toml`** — it's fully automated now.
+Two version sources feed that math, selected per repo by which
+`promote-dev-to-main.yml` input is set:
+
+- **pyproject-scoped** (the default): `bump-type` alone. Version is read
+  from/written to `pyproject.toml`'s `[project].version` on the promote
+  branch, and `release.yml`/`release-docker.yml`/`release-pypi.yml` resolve
+  the release tag from that same field on a `main` push.
+- **version-file-scoped**: `bump-type` *plus* the `version-file` input (e.g.
+  `VERSION`) pointing at a bare `X.Y.Z` file, for a repo with no Python
+  package to version. `promote-reconcile.py` creates the file if it doesn't
+  already exist — same bump math, same `0.0.0` first-release seeding, no
+  manual seeding required. The new `release-tag.yml` reusable workflow reads
+  that file to cut a `vX.Y.Z` tag + GitHub Release (no build/publish job).
+
+Either way, the promote PR title gets a `(Minor)`/`(Major)` suffix for
+visibility (the dispatch input, not the title text, is what actually drives
+the bump). **Never hand-edit a version in `pyproject.toml` or `VERSION`** —
+both are fully automated now.
 
 Scope: CognitiveSystems, MediaRefinery, ModelDeck, Uploadarr,
-`template-python-docker`, `template-python-pypi`. ModelDeck's `push`-triggered
-add-on-only promote path always passes `bump-type: none` — it must never bump
-the app version. HomeAssistant has the input available (it inherited it from
-the shared workflow) but it's a no-op there — no `pyproject.toml` to write to.
+`template-python-docker`, `template-python-pypi` (all pyproject-scoped).
+ModelDeck's `push`-triggered add-on-only promote path always passes
+`bump-type: none` — it must never bump the app version. HomeAssistant is
+version-file-scoped (tracked via issue #68): its own
+`promote-dev-to-main.yml` wrapper sets `version-file: VERSION` and calls the
+new `release-tag.yml` on `main` pushes. (Sequencing note: the shared-workflow
+side landed first in `automationnexus/.github`; HomeAssistant's consumer
+wrapper is a separate follow-up — until it merges and a promote runs, it has
+no `vX.Y.Z` tag yet, so `org-project-sync.yml` still reports its merges as
+"On Dev".)
 
 ## Why a temp branch
 
