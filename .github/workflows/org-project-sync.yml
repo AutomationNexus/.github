@@ -393,12 +393,27 @@ jobs:
                   return ref
 
               def released_or_ondev(repo, pr):
-                  ref = release_ref(repo)
+                  # #52: decide Released vs On Dev by whether the PR's merge commit is
+                  # reachable from main's current tip, not by exact ancestry to the
+                  # latest vX.Y.Z tag. Repos whose promote step creates brand-new
+                  # commits on main (e.g. ModelDeck's add-on/config-sync chores,
+                  # #121) never fast-forward the dev merge OID onto a tagged commit,
+                  # so tag-ancestry compare permanently reports "diverged" even
+                  # though the change already shipped. compare(main...merge_oid)
+                  # instead asks "is merge_oid an ancestor of (or equal to) main
+                  # HEAD" - true for both a fast-forwarded release and a
+                  # squash/rebuild-style promote that folds the same commit forward,
+                  # and false for anything still only on dev (status "ahead" or
+                  # "diverged" relative to main). release_ref() is still invoked
+                  # here (result unused for the decision) purely so its
+                  # ref_resolution_errors accounting/caching keeps reporting tag
+                  # lookup health for the summary - see #37.
+                  release_ref(repo)
                   merge_oid = (pr.get("mergeCommit") or {}).get("oid")
-                  if ref is None or merge_oid is None:
+                  if merge_oid is None:
                       return "On Dev"
                   try:
-                      compare = gh("api", f"repos/{OWNER}/{repo}/compare/{ref}...{merge_oid}")
+                      compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{merge_oid}")
                       if compare.get("status") in ("identical", "behind"):
                           return "Released"
                       return "On Dev"
