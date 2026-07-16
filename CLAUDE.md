@@ -28,7 +28,7 @@ consumer repo and running its CI.
   shared workflow — never a one-off fork in the consumer repo. Precedent: `build-args`,
   `main-source-allow-glob`, `exclude-paths`, `strip-dev-only-paths`, `bump-type`,
   `main-only` (auto-merge.yml).
-- Tag stable changes `@v1` only after they're proven; `@latest` tracks HEAD.
+- Tag stable changes to `@v1` only after they're proven.
 
 ## Templates (`templates/<group>/` + `templates/_shared/`)
 

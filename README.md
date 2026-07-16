@@ -16,7 +16,7 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 | `docs.yml` | MkDocs Material → GitHub Pages | none |
 | `add-to-project.yml` | Adds the triggering issue/PR to the org delivery Project (event-driven intake; complements `org-project-sync.yml`'s scheduled reconciliation) | `project-url` (default `https://github.com/orgs/AutomationNexus/projects/1`) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 
-Tags: `@v1` (stable) and `@latest` track the current release. Pin to a SHA for stricter security.
+Tag: `@v1` (stable) tracks the current release; pin to a commit SHA for stricter security.
 
 Full delivery-board reference: [`docs/org-project.md`](docs/org-project.md); human quickstart: [`docs/board-guide.md`](docs/board-guide.md).
 
