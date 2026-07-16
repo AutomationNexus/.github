@@ -21,6 +21,11 @@ on:
         required: false
         default: ""
         type: string
+      main-direct-push-allow-pattern:
+        description: "Optional JS regex tested against the head commit message, allowing a sanctioned non-bot, non-PR direct push to main to pass Guard Main Direct Push (e.g. the sync-templates.sh resync commit on template-* repos). Empty (default) preserves existing behavior -- no additional direct pushes are allowed. A malformed pattern is logged and ignored (fails safe: does not allow)."
+        required: false
+        default: ""
+        type: string
       # ── Auto-revert (private repos without rulesets) ─────────────────────────
       auto-revert:
         description: "Force-reset branch on unauthorised direct push"
@@ -210,6 +215,8 @@ jobs:
     steps:
       - name: Allow or reject
         uses: actions/github-script@v8
+        env:
+          MAIN_DIRECT_PUSH_ALLOW_PATTERN: ${{ inputs.main-direct-push-allow-pattern }}
         with:
           script: |
             if (context.eventName !== "push" || context.ref !== "refs/heads/main") {
@@ -235,6 +242,23 @@ jobs:
               const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
               if (prs.some(pr => pr.merged_at && pr.base?.ref === "main")) {
                 core.info("Allowed PR-merge push to main."); return;
+              }
+            }
+            // Optional, per-caller escape hatch for a sanctioned non-PR direct push (e.g.
+            // sync-templates.sh's resync commit to a template-* repo's main). Default input
+            // is empty, so every existing consumer keeps rejecting all direct pushes exactly
+            // as before -- this only ever widens behavior for a caller that opts in.
+            const allowPattern = (process.env.MAIN_DIRECT_PUSH_ALLOW_PATTERN || "").trim();
+            if (allowPattern) {
+              try {
+                const re = new RegExp(allowPattern, "m");
+                if (re.test(msg)) {
+                  core.info("Allowed by main-direct-push-allow-pattern.");
+                  return;
+                }
+              } catch (e) {
+                // Malformed pattern must never widen the guard -- log and fall through to reject.
+                core.warning(`main-direct-push-allow-pattern is not a valid regex, ignoring: ${e.message}`);
               }
             }
             core.setFailed("Direct pushes to main are not allowed. Promote dev → main with the workflow.");

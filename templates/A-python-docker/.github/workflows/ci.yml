@@ -31,6 +31,9 @@ jobs:
       lint-paths: src tests tools
       pip-install-cmd: 'pip install -e ".[dev]"'
       test-cmd: 'python -m pytest -q'
+      # Lets the sanctioned scripts/sync-templates.sh direct-push (this repo has no dev
+      # branch) pass Guard Main Direct Push instead of showing a permanent red X.
+      main-direct-push-allow-pattern: '^chore: resync from automationnexus/\.github templates/_shared'
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
