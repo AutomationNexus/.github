@@ -73,11 +73,17 @@ GitHub compare API; a merge commit at or behind that ref is `Released`, otherwis
 Dev`. Status only ever advances forward through `Backlog → In Progress → In Review →
 On Dev → Promote Pending → Released` — the sweep never downgrades a status and never
 touches `Blocked` or items already `Released` (both are treated as manual-only). A
-pull request that is merged directly into `main` (for example, a completed promote
-PR) is deliberately left unclassified: its `dev`-side item already advances to
-`Released` once that same merge commit is reachable from the release ref, so no
-separate `main`-merge transition is needed. Any REST/compare error for a given PR
-fails open to `On Dev` and is counted, rather than aborting the sweep.
+`sync/publish-main-promote-*` PR that merges into `main` has its own board item (added
+while it was open, at `Promote Pending`) that would otherwise never reach a terminal
+status on its own — unlike an ordinary feature PR merged to `dev`, there is no separate
+`dev`-side item for the sweep to advance to `Released` on its behalf. The sweep
+therefore advances that item straight to `Released` itself (`Released` is the highest
+rank, so this is never suppressed by the never-downgrade guard) and counts it under
+`promote_pending_finalized`. A PR merged directly into `main` from any other head branch
+is still left unclassified. Any REST/compare error for a given PR fails open to `On Dev`
+and is counted, rather than aborting the sweep; a systemic failure to resolve a repo's
+release tag/ref itself (not a specific PR's compare call) is counted separately under
+`ref_resolution_errors`.
 
 The previous open-PR REST sweep still runs, but only as an independent, detect-only
 cross-check now: it flags a `cross_check_mismatch` when its own `In
