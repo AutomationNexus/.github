@@ -43,6 +43,29 @@ Full delivery-board reference: [`docs/org-project.md`](docs/org-project.md); hum
   `.github/rulesets/`.
 - **Private repos** (GitHub Free can't use rulesets): CI guards + `auto-revert: true` in `ci.yml`.
 
+### Auto-merge mechanism (org-wide) and the native `allow_auto_merge` setting
+
+Consumer-repo PRs are merged by `auto-merge.yml`: it mints a CI-Bot GitHub App token, waits
+for PR checks to go green, then immediately runs `gh pr merge --squash`/`--merge` — this is
+a direct CI-Bot-driven merge, **not** GitHub's native auto-merge queue. That path works
+uniformly across public and private repos on the org's **GitHub Free** plan.
+
+The GitHub-native **Allow auto-merge** repo setting (Settings → General → Pull Requests) is
+a different thing entirely, and is intentionally kept **off and unmanaged** org-wide:
+
+- It is not used by `auto-merge.yml` or any other workflow — nothing in this org checks or
+  depends on its value.
+- On GitHub Free it can only be *enabled* on public repos (private-repo native auto-merge
+  needs a paid plan), so it could never be turned on uniformly across all 12 org repos
+  anyway.
+- As of 2026-07-16 (#35) all 12 repos read `allow_auto_merge=false` — the 4 public repos
+  (`.github`, `MediaRefinery`, `ModelDeck`, `ARCRunner`) were switched off to match the 8
+  private repos that already defaulted to off. `scripts/bootstrap-repo.sh` now sets it
+  explicitly to `false` on every newly bootstrapped repo so new repos stay consistent
+  without needing a follow-up audit.
+- Finding this flag off on any repo (including a public one) is the expected, normalized
+  state — not drift to fix.
+
 ### This repo's own `master` merges
 
 `master` is guarded by the `protect-master` ruleset: PR required, required status checks,
@@ -50,9 +73,10 @@ no direct push / deletion / non-fast-forward. There is **no required-approval ru
 solo-owner org can't self-approve on GitHub, so review is a human responsibility, not a
 ruleset-enforced second sign-off. Policy for `.github`:
 
-- A human reviews the PR, then may click **Enable auto-merge**; GitHub merges it once the
-  required checks pass. This needs **Allow auto-merge** turned on in Settings → General →
-  Pull Requests.
+- A human reviews the PR, then merges it manually (`gh pr merge`, or the web UI's **Merge**
+  button) once required checks pass. `.github`'s native **Allow auto-merge** setting is off
+  like every other repo in the org (see above) — there is no "Enable auto-merge" click
+  available here, by design.
 - **No bot auto-merge here.** Consumer repos use `auto-merge.yml` (CI-Bot merges `dev` PRs
   after green); `.github` deliberately does not — it owns every shared workflow and holds
   the CI-Bot key, so a person stays in the loop on every change to it.

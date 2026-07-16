@@ -62,6 +62,15 @@ repo. Always: feature branch → PR → `dev` → CI green →
   repos have no `dev` branch and no CI gating that push — it's the script's
   own intentional design (see `.github/CLAUDE.md`). Even so, always get
   explicit human confirmation before running it — never run it unprompted.
+- **`auto-merge.yml`'s CI-Bot merge, not GitHub's native auto-merge**: the
+  `auto-merge.yml`/CI-Bot step above is a shared reusable workflow that mints
+  a CI-Bot App token, waits for PR checks to go green, then immediately runs
+  `gh pr merge`. It is not GitHub's native auto-merge queue. That native
+  repo setting (**Allow auto-merge**) is unused org-wide and intentionally
+  kept **off** on all 12 repos (it can only be enabled on public repos on the
+  org's Free plan anyway, so it could never be turned on uniformly) — see
+  `automationnexus/.github`'s `README.md` ("Auto-merge mechanism (org-wide)
+  and the native `allow_auto_merge` setting") for the full record.
 
 ## Reusable-workflow architecture
 

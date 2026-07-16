@@ -56,7 +56,17 @@ if [ "$GROUP" != "D" ]; then
   fi
 fi
 
-# 4) Protection — public repos get rulesets; private rely on guards + auto-revert
+# 4) Normalize the native "Allow auto-merge" setting to off (all repos, any visibility).
+#    It is unused: every PR is merged by auto-merge.yml's CI-Bot App doing an immediate
+#    `gh pr merge` after checks go green, not GitHub's native auto-merge queue. On the
+#    org's GitHub Free plan the native flag can only be ENABLED on public repos anyway
+#    (private-repo auto-merge needs a paid plan), so it could never be turned on
+#    uniformly org-wide — off-and-unmanaged is the normalized state (#35). Disabling it
+#    works regardless of visibility/plan.
+gh api -X PATCH "repos/${REPO}" -f allow_auto_merge=false >/dev/null
+echo "    allow_auto_merge = false (unused; auto-merge.yml/CI-Bot is the real merge path)"
+
+# 5) Protection — public repos get rulesets; private rely on guards + auto-revert
 if [ "$VIS" = "public" ]; then
   gh api "repos/${REPO}/rulesets" -X POST --input "${RULESET_DIR}/protect-main.json" >/dev/null
   echo "    applied protect-main ruleset"
