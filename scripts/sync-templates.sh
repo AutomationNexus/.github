@@ -126,6 +126,11 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   copy_dir  "${SHARED}/githooks" "${CLONE_DIR}/.githooks"
   copy_dir  "${SHARED}/tools" "${CLONE_DIR}/tools"
   copy_file "${SHARED}/dev-only-paths" "${CLONE_DIR}/.github/dev-only-paths"
+  # Auto-merge caller: _shared's default (main-only unset/false, dev+main) is the base
+  # every group inherits. A group that needs a different caller (e.g. D's main-only:true
+  # override) ships its own copy under templates/<group>/.github/workflows/auto-merge.yml,
+  # which the group overlay step below copies on top of this one, same-path -- group wins.
+  copy_file "${SHARED}/.github/workflows/auto-merge.yml" "${CLONE_DIR}/.github/workflows/auto-merge.yml"
   # Claude Code seed: generic settings.json baseline for every group. Each group's own
   # real CLAUDE.md + .claude/agents/commands are copied below in the group overlay step
   # (CLAUDE.md.template in _shared/ is reference-only, not copied as a live file).

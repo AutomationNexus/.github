@@ -1,7 +1,9 @@
+name: Auto-merge
+
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
-    branches: [dev, main]
+    branches: [main]
 
 permissions:
   contents: write
@@ -10,6 +12,8 @@ permissions:
 jobs:
   auto-merge:
     uses: automationnexus/.github/.github/workflows/auto-merge.yml@v1
+    with:
+      main-only: true
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
