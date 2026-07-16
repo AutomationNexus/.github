@@ -1,7 +1,13 @@
-# Adds the triggering issue/PR to the org-wide delivery Project (see
-# docs/org-project.md). Intended caller trigger: issues (opened, transferred)
-# and pull_request (opened) in a consumer repo -- see
-# templates/_shared/reference-add-to-project-caller.yml for the wrapper shape.
+# Adds the triggering issue to the org-wide delivery Project (see
+# docs/org-project.md). The delivery board is ISSUE-CENTRIC: only issues
+# become cards, never PRs -- a PR's relationship to its issue is surfaced via
+# the built-in Linked pull requests field on the issue instead of a separate
+# PR card. Consumer wrappers may still trigger this on both issues (opened,
+# transferred) and pull_request (opened) -- see e.g.
+# templates/A-python-docker/.github/workflows/add-to-project.yml for the
+# wrapper shape used by all 5 starter templates -- the `add` job below gates
+# on github.event_name == 'issues' so a pull_request trigger is a harmless
+# no-op rather than adding a duplicate PR card.
 # This is a narrower, event-driven complement to org-project-sync.yml (which
 # reconciles Status on a schedule); this workflow only performs intake.
 name: Add to project
@@ -10,7 +16,7 @@ on:
   workflow_call:
     inputs:
       project-url:
-        description: Org Project (v2) URL to add the triggering issue/PR to
+        description: Org Project (v2) URL to add the triggering issue to
         required: false
         default: "https://github.com/orgs/AutomationNexus/projects/1"
         type: string
@@ -31,6 +37,13 @@ jobs:
   add:
     name: Add item to org Project
     runs-on: ubuntu-latest
+    # Issue-centric board: only an `issues` trigger should ever add a card.
+    # A pull_request trigger (still sent by existing consumer wrappers, kept
+    # for back-compat) is intentionally a no-op here -- github.event_name
+    # reflects the calling workflow's original trigger event, not
+    # `workflow_call` itself, so this correctly distinguishes the two even
+    # though both share this one reusable workflow.
+    if: github.event_name == 'issues'
     timeout-minutes: 5
     steps:
       - name: Mint CI-Bot App token
