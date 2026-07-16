@@ -250,6 +250,15 @@ repositories:
       .yamllint config -- this repo's own PRs previously ran zero status checks
       since ci.yml/semgrep.yml here are workflow_call-only definitions, not
       triggered on .github itself (organogram.md open items #10, resolved).
+      2026-07-16 (#35): native `allow_auto_merge` repo setting normalized to off
+      across all 12 org repos, including this one -- it is unused (auto-merge.yml's
+      CI-Bot App does an immediate `gh pr merge` after green checks, not GitHub's
+      native auto-merge queue) and can never be enabled uniformly on the org's
+      GitHub Free plan anyway (private repos need a paid plan). scripts/bootstrap-repo.sh
+      now sets it to false on every newly bootstrapped repo. Root README.md's
+      "This repo's own master merges" section corrected to match -- it previously
+      described relying on the native flag being on for this repo's own PRs, which
+      is no longer accurate.
 
   - repo: CognitiveSystems
     class: full
