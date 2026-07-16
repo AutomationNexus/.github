@@ -324,6 +324,7 @@ jobs:
                   "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
                   "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
                   "backlog_defaulted": 0, "track_at_risk_set": 0,
+                  "ref_resolution_errors": 0, "promote_pending_finalized": 0,
               }
 
               release_ref_cache = {}
@@ -355,6 +356,7 @@ jobs:
                                   ref = tag_name
                                   break
                   except Exception:  # noqa: BLE001 - fail-open to None, cached below
+                      counts["ref_resolution_errors"] += 1
                       ref = None
                   release_ref_cache[repo] = ref
                   return ref
@@ -416,9 +418,21 @@ jobs:
                           continue
                   elif state == "MERGED" and pr["baseRefName"] == "dev":
                       target = released_or_ondev(repo, pr)
+                  elif (
+                      state == "MERGED"
+                      and pr["baseRefName"] == "main"
+                      and pr["headRefName"].startswith("sync/publish-main-promote-")
+                  ):
+                      # A promote PR just landed on main: the board item was
+                      # "Promote Pending" (or possibly stuck at an earlier rank) and
+                      # needs a terminal status rather than staying stranded forever.
+                      # Released is rank 5 (highest), so this can never be suppressed
+                      # by the regression guard below regardless of current rank.
+                      target = "Released"
+                      counts["promote_pending_finalized"] += 1
                   else:
-                      # MERGED to a base other than dev (e.g. a completed promote PR
-                      # merged straight to main), or CLOSED unmerged - left alone.
+                      # MERGED to a base other than dev/main-promote, or CLOSED
+                      # unmerged - left alone.
                       counts["unclassified"] += 1
                       continue
 
@@ -571,10 +585,14 @@ jobs:
                   f"- Out-of-scope PR items: {counts['out_of_scope']}",
                   f"- Blocked (untouched): {counts['blocked_skipped']}",
                   f"- Already Released (untouched): {counts['released_skipped']}",
+                  f"- Promote PRs finalized to Released (merged sync/publish-main-promote-* -> main): "
+                  f"{counts['promote_pending_finalized']}",
                   f"- Unclassified (untouched): {counts['unclassified']}",
                   f"- Unknown custom status (untouched): {counts['manual_unknown_skipped']}",
                   f"- Regressions suppressed (never downgraded): {counts['regressions_suppressed']}",
                   f"- Release-ref/compare errors (fail-open to On Dev): {counts['errors']}",
+                  f"- Ref-resolution failures (tag-list/compare lookup errors, cached fail-open to null): "
+                  f"{counts['ref_resolution_errors']}",
                   (
                       f"- Area/Type auto-fill: {counts['area_type_set']} set, "
                       f"{counts['area_type_skipped_manual']} skipped (already manual), "
