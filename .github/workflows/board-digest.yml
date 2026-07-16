@@ -1,8 +1,11 @@
 # Weekly delivery-board digest: maintains a single tracking issue in .github
-# summarizing org Project #1 (status counts, in-flight ages, at-risk items,
-# and releases from the last 7 days). Not a reusable workflow - like
-# org-project-sync.yml, this is a standalone scheduled workflow that lives
-# only in this repo.
+# summarizing org Project #1 (status counts, in-flight ages, and releases
+# from the last 7 days). The board is ISSUE-CENTRIC (see org-project-sync.yml)
+# - this digest reads issue-typed board items only for its status/repo/
+# in-flight breakdowns; any legacy non-issue item still on the board is
+# counted (so the totals reconcile) but not otherwise summarized. Not a
+# reusable workflow - like org-project-sync.yml, this is a standalone
+# scheduled workflow that lives only in this repo.
 name: Board Digest
 
 on:
@@ -21,7 +24,7 @@ concurrency:
 env:
   PROJECT_NUMBER: "1"
   OWNER: AutomationNexus
-  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant ARCRunner"
 
 jobs:
   digest:
@@ -35,7 +38,7 @@ jobs:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant,ARCRunner
           permission-organization-projects: read
           permission-pull-requests: read
           permission-issues: read
@@ -44,7 +47,7 @@ jobs:
       - name: Build and post digest
         env:
           # Board/PR/release reads (CI-Bot App token, read-only, scoped to
-          # the 5 synced repos - see mint step above).
+          # the 6 synced repos - see mint step above).
           BOT_TOKEN: ${{ steps.app-token.outputs.token }}
           # Tracking-issue write in THIS repo only (.github) - the default
           # GITHUB_TOKEN, scoped by the workflow-level `issues: write`
@@ -73,7 +76,7 @@ jobs:
           # matching the rest of this repo's workflow files.
           TITLE = "\U0001F4CA Delivery digest"
 
-          STATUSES = ["Backlog", "In Progress", "In Review", "On Dev", "Promote Pending", "Released", "Blocked"]
+          STATUSES = ["Backlog", "In Progress", "In Review", "On Dev", "Promote Pending", "Done", "Released", "Blocked"]
 
           def _run(token, args):
               # The token lives only in the subprocess env for this one call, never in
@@ -86,7 +89,7 @@ jobs:
 
           def bot_gh(*args):
               # Board/PR/release reads only - CI-Bot App token, read-only, scoped to
-              # the 5 synced repos plus org Projects read. Never used for writes.
+              # the 6 synced repos plus org Projects read. Never used for writes.
               return _run(BOT_TOKEN, args)
 
           def issue_gh(*args):
@@ -133,7 +136,6 @@ jobs:
               organization(login:$owner){ projectV2(number:$number){
                 id
                 status: field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } }
-                track: field(name:"Track"){ ... on ProjectV2SingleSelectField { id options { id name } } }
               }}
             }
           """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
@@ -142,13 +144,16 @@ jobs:
           status_field = project.get("status")
           if not status_field:
               fail(f'Project {OWNER}#{NUMBER} is missing the "Status" field')
-          track_field = project.get("track")
-          HAS_TRACK = bool(track_field)
 
           # Item sweep: mirrors org-project-sync.yml's paginated items() query shape
           # (first:100, fieldValues resolved by field id) - read-only here, so no
-          # item id / labels / mergeCommit are fetched, only what the digest needs.
+          # item id / labels / linked-PR data are fetched, only what the digest needs.
+          # Issue-typed items only (mirroring org-project-sync.yml's issue-centric
+          # model): a non-issue (legacy PR) item is counted via non_issue_items so
+          # the digest's totals still reconcile, but never added to `items` - it
+          # has no meaningful derived Status of its own to summarize.
           items = []
+          non_issue_items = 0
           after = None
           while True:
               page = bot_graphql("""
@@ -157,10 +162,6 @@ jobs:
                     items(first:100, after:$after){
                       pageInfo { hasNextPage endCursor }
                       nodes { content { __typename
-                          ... on PullRequest {
-                            url number state baseRefName headRefName createdAt mergedAt
-                            repository { name }
-                          }
                           ... on Issue {
                             url number state createdAt
                             repository { name }
@@ -177,25 +178,21 @@ jobs:
               page_items = page["organization"]["projectV2"]["items"]
               for node in page_items["nodes"]:
                   content = node.get("content") or {}
+                  if content.get("__typename") != "Issue":
+                      non_issue_items += 1
+                      continue
                   current_status = next(
                       (value.get("name") for value in node["fieldValues"]["nodes"]
                        if value.get("field", {}).get("id") == status_field["id"]), None)
-                  current_track = (
-                      next((value.get("name") for value in node["fieldValues"]["nodes"]
-                            if value.get("field", {}).get("id") == track_field["id"]), None)
-                      if HAS_TRACK else None
-                  )
                   # Deliberately never keep content["url"] / any title text below - only
                   # repo + number ever reach the digest markdown, to avoid rendering
-                  # attacker-influenced (e.g. an external contributor's PR title)
+                  # attacker-influenced (e.g. an external contributor's issue title)
                   # markdown/links inside a body we post to a real tracking issue.
                   items.append({
                       "number": content.get("number"),
                       "repo": (content.get("repository") or {}).get("name"),
                       "createdAt": content.get("createdAt"),
-                      "mergedAt": content.get("mergedAt"),
                       "status": current_status,
-                      "track": current_track,
                   })
               if not page_items["pageInfo"]["hasNextPage"]:
                   break
@@ -205,28 +202,36 @@ jobs:
           monday = (now - datetime.timedelta(days=now.weekday())).date()
 
           status_counts = {name: 0 for name in STATUSES}
+          other_status_items = 0
           repo_counts = {}
           in_flight = []
-          at_risk = []
 
           for entry in items:
               status = entry["status"]
               if status in status_counts:
                   status_counts[status] += 1
+              else:
+                  # No Status yet (freshly added), or a manual/custom value this
+                  # digest doesn't recognize - still counted here so the totals
+                  # below reconcile against the real issue-item population.
+                  other_status_items += 1
               repo = entry["repo"]
               if repo:
                   repo_counts[repo] = repo_counts.get(repo, 0) + 1
               if status in ("In Review", "On Dev", "Promote Pending") and repo and entry["number"] is not None:
-                  if status == "On Dev":
-                      reference = parse_ts(entry["mergedAt"]) or parse_ts(entry["createdAt"])
-                  else:
-                      reference = parse_ts(entry["createdAt"])
+                  # Age is measured from the issue's own createdAt, not a linked
+                  # PR's createdAt/mergedAt - Status now lives on the issue
+                  # (org-project-sync.yml derives it from linked PRs), and this
+                  # read-only digest deliberately doesn't re-fetch each issue's
+                  # linked-PR data just to compute a more precise per-stage
+                  # timestamp. A coarser "time since issue opened" signal, not
+                  # "time in this exact stage" - still directionally useful for
+                  # spotting something that's been sitting for a long time.
+                  reference = parse_ts(entry["createdAt"])
                   label = f"{repo}#{entry['number']}"
                   if reference is not None:
                       label += f" ({(now - reference).days}d)"
                   in_flight.append((status, label))
-              if entry["track"] in ("At risk", "Off track") and repo and entry["number"] is not None:
-                  at_risk.append(f"{repo}#{entry['number']}")
 
           IN_FLIGHT_ORDER = {"In Review": 0, "On Dev": 1, "Promote Pending": 2}
           in_flight.sort(key=lambda pair: IN_FLIGHT_ORDER.get(pair[0], 99))
@@ -265,19 +270,22 @@ jobs:
               if REPOS else "none"
           )
 
+          total_population = len(items) + non_issue_items
           lines = [
               f"## \U0001F4CA Delivery digest \u2014 week of {monday.isoformat()}",
               "",
               f"**Status counts:** {status_line}",
+              (
+                  f"_(+ {other_status_items} issue(s) with no/unrecognized Status, "
+                  f"{non_issue_items} non-issue item(s) on the board (legacy PR cards) "
+                  f"\u2014 total board population {total_population})_"
+              ),
               "",
               "### Released last 7d",
               bullet_list(released_last_7d),
               "",
               "### In flight",
               bullet_list(in_flight_labels),
-              "",
-              "### At risk",
-              bullet_list(at_risk),
               "",
               "### By repo",
               repo_line,

@@ -259,6 +259,25 @@ repositories:
       "This repo's own master merges" section corrected to match -- it previously
       described relying on the native flag being on for this repo's own PRs, which
       is no longer accurate.
+      2026-07-16 (branch feat/board-issue-centric-lean, PR pending): delivery
+      board redesigned to ISSUE-CENTRIC and LEAN. Issues are now the only board
+      cards; a PR never gets its own item -- its progress surfaces via the
+      linked issue's derived Status (resolved from `closedByPullRequestsReferences`)
+      instead. add-to-project.yml gates its add step to `github.event_name ==
+      'issues'` (a v1 tag advance is required before this reaches consumers).
+      org-project-sync.yml's reconcile() now classifies each issue's linked
+      PR(s) via a new pr_stage() helper and writes the issue's Status directly
+      (Done added as a rank-5 stage, just below Released, for closed issues with
+      no shippable linked PR); the old PR-item-driven cross-check pass is
+      removed. bootstrap-org-project.sh's Status-options step is now
+      create-only (checks for "Backlog" before mutating) after live GraphQL
+      introspection confirmed the prior full-replace mutation mints new option
+      ids for every option (even unchanged ones) and silently blanks every
+      item's stored Status -- destructive on any already-populated board. The
+      unused planning layer (Bump type, Priority, Track, Release target, Start
+      date, Target date) was dropped from bootstrap-org-project.sh and
+      board-digest.yml/docs, since none of it was read or written by any
+      automation. See docs/org-project.md for the full derived-status model.
 
   - repo: CognitiveSystems
     class: full

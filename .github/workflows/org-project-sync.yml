@@ -1,4 +1,7 @@
-# Org-wide delivery board sync for open PRs in the supported repositories.
+# Org-wide delivery board sync. The board is ISSUE-CENTRIC: issues are the
+# cards, and this workflow derives each issue's Status from its linked pull
+# request(s) (across the supported repositories) rather than classifying PRs
+# as cards in their own right.
 name: Org Project Sync
 
 on:
@@ -54,7 +57,6 @@ jobs:
           WRITE_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.write_probe || false }}
         run: |
           python3 - <<'PY'
-          import datetime
           import json
           import os
           import re
@@ -124,9 +126,6 @@ jobs:
                 areaType: field(name:"Area/Type"){ ... on ProjectV2SingleSelectField {
                   id options { id name }
                 }}
-                track: field(name:"Track"){ ... on ProjectV2SingleSelectField {
-                  id options { id name }
-                }}
               }}
             }
           """, owner=OWNER, number=NUMBER)["organization"]["projectV2"]
@@ -150,22 +149,12 @@ jobs:
               if HAS_AREA_TYPE else {}
           )
 
-          # Track staleness auto-flagging is an enhancement, not core: if the
-          # field isn't on the board, skip all Track work below rather than
-          # failing the run.
-          track_field = project.get("track")
-          HAS_TRACK = bool(track_field)
-          track_options = (
-              {option["name"]: option["id"] for option in track_field["options"]}
-              if HAS_TRACK else {}
-          )
-
           # Closed-issue -> Done reconciliation is an enhancement, not core: if
           # the "Done" Status option isn't on the board yet, skip this feature
-          # entirely rather than failing the run (same pattern as Area/Type and
-          # Track above). Done is just another option on the existing Status
-          # field, not a separate field, so this reads from `options` rather
-          # than querying a dedicated field like areaType/track above.
+          # entirely rather than failing the run (same pattern as Area/Type
+          # above). Done is just another option on the existing Status field,
+          # not a separate field, so this reads from `options` rather than
+          # querying a dedicated field like areaType above.
           HAS_DONE = "Done" in options
 
           def set_single_select(item_id, field_id, option_id):
@@ -244,18 +233,27 @@ jobs:
                   fail(f"Write probe verification failed: {assert_error}")
 
           def reconcile():
+              # Done sits just below Released, not tied with it: an issue
+              # already at Done can still advance to Released if a linked PR
+              # is later found to have actually shipped (Done -> Released is
+              # a correction, not a downgrade), while the never-downgrade
+              # guard below still stops every ordinary pipeline stage
+              # (Backlog..Promote Pending) from overwriting Done, and stops
+              # Done itself from ever overwriting Released. Released remains
+              # the sole ceiling.
               RANK = {
                   "Backlog": 0,
                   "In Progress": 1,
                   "In Review": 2,
                   "On Dev": 3,
                   "Promote Pending": 4,
-                  "Released": 5,
+                  "Done": 5,
+                  "Released": 6,
               }
 
-              project_items_by_url = {}
-              pr_items = []
+              issue_items = []
               all_items = []
+              non_issue_items = 0
               after = None
               while True:
                   page = graphql("""
@@ -266,16 +264,6 @@ jobs:
                           nodes { id content { __typename
                               ... on PullRequest {
                                 url
-                                state
-                                merged
-                                createdAt
-                                mergedAt
-                                baseRefName
-                                headRefName
-                                isCrossRepository
-                                mergeCommit { oid }
-                                repository { name owner { login } }
-                                labels(first:20){ nodes { name } }
                               }
                               ... on Issue {
                                 url
@@ -283,6 +271,17 @@ jobs:
                                 title
                                 repository { name owner { login } }
                                 labels(first:20){ nodes { name } }
+                                closedByPullRequestsReferences(first:20, includeClosedPrs:true){
+                                  nodes {
+                                    number
+                                    state
+                                    merged
+                                    baseRefName
+                                    headRefName
+                                    mergeCommit { oid }
+                                    repository { name owner { login } }
+                                  }
+                                }
                               }
                             }
                             fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
@@ -296,44 +295,32 @@ jobs:
                   items = page["organization"]["projectV2"]["items"]
                   for item in items["nodes"]:
                       content = item.get("content") or {}
+                      if content.get("__typename") != "Issue":
+                          # The delivery board tracks ISSUES only now. A PR
+                          # item still on the board is a legacy card from
+                          # before this redesign -- left fully untouched here
+                          # (never classified, never given a Status write);
+                          # it's archived separately. A PR's relationship to
+                          # its issue is surfaced via the built-in Linked
+                          # pull requests field on the issue instead.
+                          non_issue_items += 1
+                          continue
                       current = next((value.get("name") for value in item["fieldValues"]["nodes"]
                                       if value.get("field", {}).get("id") == status["id"]), None)
-                      current_track = (
-                          next((value.get("name") for value in item["fieldValues"]["nodes"]
-                                if value.get("field", {}).get("id") == track_field["id"]), None)
-                          if HAS_TRACK else None
-                      )
-                      pr = None
-                      issue = None
-                      if content.get("__typename") == "PullRequest":
-                          pr = {
-                              "url": content["url"],
-                              "state": content["state"],
-                              "merged": content["merged"],
-                              "createdAt": content.get("createdAt"),
-                              "mergedAt": content.get("mergedAt"),
-                              "baseRefName": content["baseRefName"],
-                              "headRefName": content["headRefName"],
-                              "isCrossRepository": content["isCrossRepository"],
-                              "mergeCommit": content.get("mergeCommit"),
-                              "repository": content["repository"],
-                          }
-                          project_items_by_url[pr["url"]] = {"item_id": item["id"], "current_status": current}
-                      elif content.get("__typename") == "Issue":
-                          issue = {
-                              "url": content["url"],
-                              "state": content["state"],
-                              "title": content.get("title"),
-                              "repository": content["repository"],
-                          }
-                      pr_items.append({
+                      linked_prs = (content.get("closedByPullRequestsReferences") or {}).get("nodes") or []
+                      issue = {
+                          "url": content["url"],
+                          "state": content["state"],
+                          "title": content.get("title"),
+                          "repository": content["repository"],
+                          "linked_prs": linked_prs,
+                      }
+                      issue_items.append({
                           "item_id": item["id"],
                           "current_status": current,
-                          "pr": pr,
                           "issue": issue,
-                          "current_track": current_track,
                       })
-                      if HAS_AREA_TYPE and content.get("__typename") in ("PullRequest", "Issue"):
+                      if HAS_AREA_TYPE:
                           current_area_type = next(
                               (value.get("name") for value in item["fieldValues"]["nodes"]
                                if value.get("field", {}).get("id") == area_type_field["id"]), None)
@@ -349,17 +336,17 @@ jobs:
                   after = items["pageInfo"]["endCursor"]
 
               counts = {
-                  "scanned": 0, "open_prs": 0, "candidates": 0,
+                  "issues_scanned": 0, "non_issue_items": non_issue_items,
+                  "digest_issue_skipped": 0, "linked_prs_resolved": 0,
                   "would_update": 0, "updated": 0, "already_correct": 0,
-                  "missing_item": 0, "skipped": 0,
-                  "in_review": 0, "promote_pending": 0, "on_dev": 0, "released": 0,
-                  "non_pr_items": 0, "out_of_scope": 0, "blocked_skipped": 0,
-                  "released_skipped": 0, "unclassified": 0, "manual_unknown_skipped": 0,
-                  "regressions_suppressed": 0, "errors": 0, "cross_check_mismatch": 0,
+                  "in_review": 0, "on_dev": 0, "promote_pending": 0,
+                  "released": 0, "done": 0,
+                  "backlog_defaulted": 0, "open_no_pr_unchanged": 0,
+                  "done_skipped_no_option": 0, "released_skipped": 0,
+                  "blocked_skipped": 0, "manual_unknown_skipped": 0,
+                  "regressions_suppressed": 0, "errors": 0,
+                  "ref_resolution_errors": 0,
                   "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
-                  "backlog_defaulted": 0, "track_at_risk_set": 0,
-                  "ref_resolution_errors": 0, "promote_pending_finalized": 0,
-                  "main_only_released": 0, "done_finalized": 0,
               }
 
               release_ref_cache = {}
@@ -421,41 +408,70 @@ jobs:
                       counts["errors"] += 1
                       return "On Dev"
 
-              final_status = {entry["item_id"]: entry["current_status"] for entry in pr_items}
+              def pr_stage(pr):
+                  # Classifies a single linked PR into one pipeline stage, or
+                  # None if it isn't (yet) pipeline-classifiable -- e.g. a
+                  # `.github` PR merged to `master` (out of REPOS scope), or a
+                  # CLOSED-unmerged PR. Reuses the pre-redesign PR-classification
+                  # logic verbatim (previously applied to the PR's own board
+                  # item; now applied to each of an issue's linked PRs). Pure
+                  # function: release_ref()/released_or_ondev() above are what
+                  # account errors/ref_resolution_errors, not pr_stage itself.
+                  repo = pr["repository"]["name"]
+                  owner_login = pr["repository"]["owner"]["login"]
+                  if owner_login != OWNER or repo not in REPOS:
+                      return None
+                  state = pr["state"]
+                  if state == "OPEN":
+                      if pr["baseRefName"] == "dev":
+                          return "In Review"
+                      if (
+                          pr["baseRefName"] == "main"
+                          and pr["headRefName"].startswith("sync/publish-main-promote-")
+                      ):
+                          return "Promote Pending"
+                      return None
+                  if state == "MERGED" and pr["baseRefName"] == "dev":
+                      return released_or_ondev(repo, pr)
+                  if state == "MERGED" and pr["baseRefName"] == "main":
+                      if pr["headRefName"].startswith("sync/publish-main-"):
+                          # A promote-branch (sync/publish-main-promote-*) or any
+                          # other publish-flow branch (e.g. ModelDeck's nightly
+                          # add-on-only sync/publish-main-<version>, or a
+                          # pin-sync push) just landed on main - deliberately
+                          # broader than just the "-promote-" prefix, see gap-2
+                          # notes.
+                          return "Released"
+                      if repo in MAIN_ONLY_REPOS:
+                          # Main-only repos (no dev branch - e.g. ARCRunner)
+                          # merge ordinary feature branches straight to main;
+                          # that merge IS the release, there's no separate
+                          # promote/publish step to wait for.
+                          return "Released"
+                      return None
+                  # MERGED to a base other than dev/main, or CLOSED unmerged.
+                  return None
 
-              for entry in pr_items:
+              STATUS_BUCKET = {
+                  "In Review": "in_review",
+                  "On Dev": "on_dev",
+                  "Promote Pending": "promote_pending",
+                  "Released": "released",
+                  "Done": "done",
+              }
+
+              for entry in issue_items:
                   item_id = entry["item_id"]
                   current = entry["current_status"]
-                  pr = entry["pr"]
+                  issue = entry["issue"]
+                  counts["issues_scanned"] += 1
 
-                  if pr is None:
-                      counts["non_pr_items"] += 1
-                      issue = entry.get("issue")
-                      # Closed-issue -> Done: a closed Issue content item is a
-                      # completed deliverable and shouldn't linger in
-                      # Backlog/In Progress/etc forever. Only CLOSED issues are
-                      # affected (open status-less issues still default to
-                      # Backlog below); never downgrades an item already at
-                      # Done or Released; and explicitly skips the perpetual
-                      # board-digest.yml tracking issue, which is never a real
-                      # deliverable even if it's ever closed.
-                      if (
-                          HAS_DONE
-                          and issue is not None
-                          and issue["state"] == "CLOSED"
-                          and current not in ("Done", "Released")
-                          and not is_delivery_digest_issue(issue)
-                      ):
-                          if not DRY_RUN:
-                              set_status(item_id, options["Done"])
-                          counts["done_finalized"] += 1
-                          continue
-                      # Item-added -> Backlog: default a status-less item (e.g. a freshly
-                      # auto-added issue) to Backlog. Never overrides an existing status.
-                      if current is None and "Backlog" in options:
-                          if not DRY_RUN:
-                              set_status(item_id, options["Backlog"])
-                          counts["backlog_defaulted"] += 1
+                  # The board-digest.yml tracking issue is a perpetual
+                  # auto-managed meta-issue, never a real deliverable - skip it
+                  # entirely (not just the Done transition) so nothing below
+                  # ever touches its Status, even if it's ever closed/reopened.
+                  if is_delivery_digest_issue(issue):
+                      counts["digest_issue_skipped"] += 1
                       continue
                   if current == "Released":
                       counts["released_skipped"] += 1
@@ -464,91 +480,42 @@ jobs:
                       counts["blocked_skipped"] += 1
                       continue
 
-                  repo = pr["repository"]["name"]
-                  owner_login = pr["repository"]["owner"]["login"]
-                  if pr["isCrossRepository"] or owner_login != OWNER or repo not in REPOS:
-                      counts["out_of_scope"] += 1
-                      continue
+                  linked_prs = issue.get("linked_prs") or []
+                  counts["linked_prs_resolved"] += len(linked_prs)
+                  stages = [pr_stage(pr) for pr in linked_prs]
+                  classified = [stage for stage in stages if stage is not None]
+                  max_stage = max(classified, key=lambda stage: RANK[stage]) if classified else None
 
-                  state = pr["state"]
-                  if state == "OPEN":
-                      if pr["baseRefName"] == "dev":
-                          target = "In Review"
-                      elif (
-                          pr["baseRefName"] == "main"
-                          and pr["headRefName"].startswith("sync/publish-main-promote-")
-                      ):
-                          target = "Promote Pending"
-                      else:
-                          counts["unclassified"] += 1
+                  if max_stage is not None:
+                      # A classifiable linked PR always wins, regardless of the
+                      # issue's own open/closed state - the deliverable's real
+                      # pipeline position is what matters (e.g. a Released
+                      # linked PR means Released even if the issue itself was
+                      # never formally closed).
+                      target = max_stage
+                  elif issue["state"] == "CLOSED":
+                      # Closed, no classifiable linked PR: a completed
+                      # deliverable with no versioned release (meta/decision
+                      # work, a .github-only change, wontfix, etc). Only if
+                      # the board actually has the "Done" option yet - it may
+                      # not, until scripts/bootstrap-org-project.sh is next run
+                      # against the live board - skip (not fail) if absent,
+                      # same fail-open pattern as Area/Type above.
+                      if not HAS_DONE:
+                          counts["done_skipped_no_option"] += 1
                           continue
-                  elif state == "MERGED" and pr["baseRefName"] == "dev":
-                      target = released_or_ondev(repo, pr)
-                  elif state == "MERGED" and pr["baseRefName"] == "main":
-                      if pr["headRefName"].startswith("sync/publish-main-"):
-                          # A promote-branch (sync/publish-main-promote-*) or any
-                          # other publish-flow branch (e.g. ModelDeck's nightly
-                          # add-on-only sync/publish-main-<version>, or a
-                          # pin-sync push) just landed on main: the board item
-                          # needs a terminal status rather than staying stranded
-                          # forever. Released is rank 5 (highest), so this can
-                          # never be suppressed by the regression guard below
-                          # regardless of current rank. Deliberately broader
-                          # than just the "-promote-" prefix - see gap-2 notes.
-                          target = "Released"
-                          counts["promote_pending_finalized"] += 1
-                      elif repo in MAIN_ONLY_REPOS:
-                          # Main-only repos (no dev branch - e.g. ARCRunner)
-                          # merge ordinary feature branches straight to main;
-                          # that merge IS the release, there's no separate
-                          # promote/publish step to wait for.
-                          target = "Released"
-                          counts["main_only_released"] += 1
-                      else:
-                          counts["unclassified"] += 1
-                          continue
+                      target = "Done"
                   else:
-                      # MERGED to a base other than dev/main, or CLOSED
-                      # unmerged - left alone.
-                      counts["unclassified"] += 1
+                      # Open issue, no classifiable linked PR: default a
+                      # status-less item (e.g. a freshly auto-added issue) to
+                      # Backlog. Never overrides an existing status.
+                      if current is None and "Backlog" in options:
+                          if not DRY_RUN:
+                              set_status(item_id, options["Backlog"])
+                          counts["backlog_defaulted"] += 1
+                      else:
+                          counts["open_no_pr_unchanged"] += 1
                       continue
-
-                  # Staleness auto-flagging (Track field): independent of the Status
-                  # write below and of the rank/regression logic that follows - it
-                  # only ever nudges Track from unset/"On track" to "At risk", never
-                  # touches "Off track" or a manually-set "At risk", and never sets
-                  # "On track". A malformed/absent timestamp just skips staleness for
-                  # this item rather than raising.
-                  stale = False
-                  try:
-                      now = datetime.datetime.now(datetime.timezone.utc)
-                      if target == "In Review":
-                          created_at = pr.get("createdAt")
-                          if created_at is not None:
-                              created = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                              stale = (now - created) > datetime.timedelta(days=7)
-                      elif target == "Promote Pending":
-                          created_at = pr.get("createdAt")
-                          if created_at is not None:
-                              created = datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                              stale = (now - created) > datetime.timedelta(days=3)
-                      elif target == "On Dev":
-                          merged_at = pr.get("mergedAt")
-                          if merged_at is not None:
-                              merged = datetime.datetime.fromisoformat(merged_at.replace("Z", "+00:00"))
-                              stale = (now - merged) > datetime.timedelta(days=5)
-                  except Exception:  # noqa: BLE001 - malformed/absent timestamp: skip, never crash
-                      stale = False
-
-                  if (
-                      stale
-                      and HAS_TRACK
-                      and entry["current_track"] in (None, "On track")
-                      and "At risk" in track_options
-                  ):
-                      if not DRY_RUN:
-                          set_single_select(item_id, track_field["id"], track_options["At risk"])
-                      counts["track_at_risk_set"] += 1
 
                   if current is None:
                       cur_rank = -1
@@ -561,21 +528,13 @@ jobs:
                   tgt_rank = RANK[target]
                   if tgt_rank == cur_rank:
                       counts["already_correct"] += 1
-                      final_status[item_id] = target
                       continue
                   if tgt_rank < cur_rank:
                       counts["regressions_suppressed"] += 1
                       continue
 
                   counts["would_update"] += 1
-                  final_status[item_id] = target
-                  bucket = {
-                      "In Review": "in_review",
-                      "Promote Pending": "promote_pending",
-                      "On Dev": "on_dev",
-                      "Released": "released",
-                  }[target]
-                  counts[bucket] += 1
+                  counts[STATUS_BUCKET[target]] += 1
                   if not DRY_RUN:
                       set_status(item_id, options[target])
                       counts["updated"] += 1
@@ -610,68 +569,43 @@ jobs:
                           set_single_select(entry["item_id"], area_type_field["id"], area_type_options[target_name])
                       counts["area_type_set"] += 1
 
-              # Cross-check pass: independent open-PR REST sweep, detect-only (no
-              # writes) - flags disagreement with the item-driven pass above.
-              for repo in REPOS:
-                  counts["scanned"] += 1
-                  prs = gh("pr", "list", "--repo", f"{OWNER}/{repo}", "--state", "open",
-                           "--limit", "1000", "--json",
-                           "url,headRefName,baseRefName,isCrossRepository,headRepositoryOwner")
-                  counts["open_prs"] += len(prs)
-                  for pr in prs:
-                      same_trusted_repo = (
-                          not pr["isCrossRepository"]
-                          and (pr.get("headRepositoryOwner") or {}).get("login") == OWNER
-                      )
-                      if not same_trusted_repo:
-                          counts["skipped"] += 1
-                          continue
-                      if (
-                          pr["baseRefName"] == "main"
-                          and pr["headRefName"].startswith("sync/publish-main-promote-")
-                      ):
-                          expected = "Promote Pending"
-                      elif pr["baseRefName"] == "dev":
-                          expected = "In Review"
-                      else:
-                          counts["skipped"] += 1
-                          continue
-
-                      counts["candidates"] += 1
-                      item = project_items_by_url.get(pr["url"])
-                      if not item:
-                          counts["missing_item"] += 1
-                          continue
-                      if final_status.get(item["item_id"]) != expected:
-                          counts["cross_check_mismatch"] += 1
+              # No cross-check pass in the issue-centric model: the old pass
+              # independently REST-swept open PRs and compared their expected
+              # Status against the item-driven pass's result. That only made
+              # sense when a PR's own board item carried Status; now Status
+              # lives on the issue, derived from linked PRs, so there is no
+              # comparable second signal to check the item-driven pass
+              # against without just re-deriving the exact same thing. Fully
+              # removed rather than reworked -- see PR description.
 
               mode = "dry run" if DRY_RUN else "mutation"
               write_summary([
                   f"### Org Project Sync ({mode})",
-                  f"- Scanned repositories: {counts['scanned']}",
+                  f"- Issues scanned: {counts['issues_scanned']}",
+                  f"- Non-issue items on board (legacy PR cards, untouched): {counts['non_issue_items']}",
+                  f"- Delivery-digest tracking issue skipped: {counts['digest_issue_skipped']}",
+                  f"- Linked PRs resolved (across all scanned issues): {counts['linked_prs_resolved']}",
                   f"- Would update: {counts['would_update']}",
                   f"- Actual updated: {counts['updated']}",
                   f"- Already correct: {counts['already_correct']}",
                   (
                       f"- Target buckets: In Review {counts['in_review']}, "
+                      f"On Dev {counts['on_dev']}, "
                       f"Promote Pending {counts['promote_pending']}, "
-                      f"On Dev {counts['on_dev']}, Released {counts['released']}"
+                      f"Released {counts['released']}, Done {counts['done']}"
                   ),
-                  f"- Non-PR items: {counts['non_pr_items']}",
-                  f"- Defaulted to Backlog (item-added): {counts['backlog_defaulted']}",
+                  f"- Defaulted to Backlog (item-added, no classifiable linked PR yet): {counts['backlog_defaulted']}",
+                  f"- Open, no classifiable linked PR (untouched): {counts['open_no_pr_unchanged']}",
                   (
-                      f"- Closed issues finalized to Done: {counts['done_finalized']}"
-                      + ("" if HAS_DONE else " (Done option absent on board - skipped)")
+                      f"- Closed, no classifiable linked PR, but Done option absent on board (skipped): "
+                      f"{counts['done_skipped_no_option']}"
+                      + ("" if HAS_DONE else " (Done field not yet on board - run bootstrap-org-project.sh)")
                   ),
-                  f"- Out-of-scope PR items: {counts['out_of_scope']}",
-                  f"- Blocked (untouched): {counts['blocked_skipped']}",
                   f"- Already Released (untouched): {counts['released_skipped']}",
-                  f"- Promote/publish PRs finalized to Released (merged sync/publish-main-* -> main): "
-                  f"{counts['promote_pending_finalized']}",
-                  f"- Main-only repo feature merges finalized to Released: {counts['main_only_released']}",
-                  f"- Unclassified (untouched): {counts['unclassified']}",
+                  f"- Blocked (untouched): {counts['blocked_skipped']}",
                   f"- Unknown custom status (untouched): {counts['manual_unknown_skipped']}",
-                  f"- Regressions suppressed (never downgraded): {counts['regressions_suppressed']}",
+                  f"- Regressions suppressed (never downgraded, incl. Released/Done never overwritten): "
+                  f"{counts['regressions_suppressed']}",
                   f"- Release-ref/compare errors (fail-open to On Dev): {counts['errors']}",
                   f"- Ref-resolution failures (tag-list/compare lookup errors, cached fail-open to null): "
                   f"{counts['ref_resolution_errors']}",
@@ -681,13 +615,6 @@ jobs:
                       f"{counts['area_type_no_match']} no matching label"
                       + ("" if HAS_AREA_TYPE else " (field absent on board - skipped)")
                   ),
-                  f"- Flagged At risk (stale): {counts['track_at_risk_set']}",
-                  (
-                      f"- Cross-check (open-PR REST sweep, detect-only): {counts['open_prs']} open PRs / "
-                      f"{counts['candidates']} candidates, {counts['skipped']} skipped/out-of-scope"
-                  ),
-                  f"- Cross-check missing Project item: {counts['missing_item']}",
-                  f"- Cross-check mismatches vs. item-driven pass: {counts['cross_check_mismatch']}",
               ])
 
           if WRITE_PROBE:
