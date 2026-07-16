@@ -330,7 +330,7 @@ repositories:
   - repo: HomeAssistant
     class: config-only
     default_branch: dev
-    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main -> PR -> main (no version bump; no pyproject.toml)"
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main (bump-type + version-file=VERSION) -> PR -> main -> release-tag.yml (tag + GitHub Release; version sourced from VERSION file, no pyproject.toml)"
     team_policy: full-core
     domain_agents: [yaml-engineer, live-inspector, drift-sync, release-operator]
     extra_orchestration: [dry-run-deploy]
@@ -345,6 +345,14 @@ repositories:
       dry-run-deploy is not an agent file; it names the /deploy-dry-run command
       (dispatches release-operator for a deploy preflight), confirmed intentional,
       not drift.
+      2026-07-16: branch_flow updated for issue #68 (adopt vX.Y.Z tagging for a
+      pyproject-less repo) -- promote-reconcile.py gained a --version-file bump path
+      and a new release-tag.yml reusable workflow (tag + GitHub Release, no
+      build/publish job) landed in automationnexus/.github. This is the platform side
+      only: HomeAssistant's own promote-dev-to-main.yml wrapper (version-file input)
+      and a new release-tag.yml caller are a separate follow-up, not yet applied --
+      until that lands and a promote runs, org-project-sync still reports HA merges
+      as "On Dev" (no vX.Y.Z tag exists yet to compare against).
 
   - repo: ARCRunner
     class: minimal

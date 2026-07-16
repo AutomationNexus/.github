@@ -1,0 +1,100 @@
+name: Release (Tag)
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        required: false
+        default: '["ubuntu-latest"]'
+        type: string
+      version-file:
+        description: >-
+          Bare X.Y.Z file (e.g. VERSION) this workflow reads to resolve the release tag on
+          a main-push trigger, for a repo with no pyproject.toml.
+        required: true
+        type: string
+      tag_name:
+        required: false
+        default: ""
+        type: string
+    outputs:
+      tag_name:
+        description: "Resolved release tag"
+        value: ${{ jobs.resolve.outputs.tag_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    name: Resolve Release Tag
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      event_kind: ${{ steps.resolve.outputs.event_kind }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Resolve tag
+        id: resolve
+        env:
+          VERSION_FILE: ${{ inputs.version-file }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+            if [ -z "$TAG" ]; then
+              echo "tag_name is required for manual dispatch rebuilds"
+              exit 1
+            fi
+            KIND="dispatch"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            KIND="tag_push"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            # Single source of truth = the bare VERSION_FILE (no pyproject.toml in this
+            # repo). The git tag follows that file's version so tag and release agree.
+            if [ ! -f "${VERSION_FILE}" ]; then
+              echo "::error::${VERSION_FILE} not found on main; nothing to resolve a tag from."
+              exit 1
+            fi
+            VERSION=$(tr -d '[:space:]' < "${VERSION_FILE}")
+            TAG="v${VERSION}"
+            KIND="main_push"
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists — version not bumped in ${VERSION_FILE}; nothing to release."
+              echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+              echo "event_kind=noop" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git tag -a "$TAG" -m "${HEAD_COMMIT_MESSAGE:0:72}"
+            git push origin "$TAG"
+          else
+            echo "Unsupported trigger: ${{ github.event_name }} ${{ github.ref }}"
+            exit 1
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "event_kind=$KIND" >> "$GITHUB_OUTPUT"
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.event_kind != 'noop'
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve.outputs.tag_name }}
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag_name }}
+          name: Release ${{ needs.resolve.outputs.tag_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

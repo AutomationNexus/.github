@@ -118,7 +118,7 @@ def strip_dev_only_paths() -> None:
         run("git", "rm", "-q", "-f", "--", *paths)
 
 
-def version_from_main(main_ref: str) -> tuple[int, int, int]:
+def version_from_main(main_ref: str, version_file: str = "") -> tuple[int, int, int]:
     tags = run(
         "git", "tag", "--list", "v*.*.*", "--merged", main_ref, capture_output=True
     ).stdout.splitlines()
@@ -130,13 +130,36 @@ def version_from_main(main_ref: str) -> tuple[int, int, int]:
     if versions:
         return max(versions)
 
-    result = run("git", "show", f"{main_ref}:pyproject.toml", check=False, capture_output=True)
-    match = re.search(
-        r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', result.stdout
-    )
+    if version_file:
+        # Bare X.Y.Z file (no pyproject.toml in this repo). Missing file on main is not
+        # an error -- git show returns nonzero, stdout is empty, and we fall through to
+        # the 0.0.0 first-release seed below.
+        result = run("git", "show", f"{main_ref}:{version_file}", check=False, capture_output=True)
+        match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
+    else:
+        result = run("git", "show", f"{main_ref}:pyproject.toml", check=False, capture_output=True)
+        match = re.search(
+            r'(?m)^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', result.stdout
+        )
     if match:
         return tuple(int(group) for group in match.groups())
     return 0, 0, 0
+
+
+def _bump_tuple(version: tuple[int, int, int], bump_type: str) -> tuple[int, int, int]:
+    """Shared patch/minor/major/wrap-at-99 math for both version sources."""
+    x, y, z = version
+    if bump_type == "major":
+        return x + 1, 1, 1
+    if bump_type == "minor":
+        return x, y + 1, 1
+    if bump_type == "patch":
+        z += 1
+        if z > 99:
+            y += 1
+            z = 1
+        return x, y, z
+    raise ReconcileError(f"Unsupported bump type: {bump_type}")
 
 
 def bump_version(main_ref: str, bump_type: str) -> str | None:
@@ -144,19 +167,7 @@ def bump_version(main_ref: str, bump_type: str) -> str | None:
     if bump_type == "none" or not pyproject.is_file():
         return None
 
-    x, y, z = version_from_main(main_ref)
-    if bump_type == "major":
-        x, y, z = x + 1, 1, 1
-    elif bump_type == "minor":
-        x, y, z = x, y + 1, 1
-    elif bump_type == "patch":
-        z += 1
-        if z > 99:
-            y += 1
-            z = 1
-    else:
-        raise ReconcileError(f"Unsupported bump type: {bump_type}")
-
+    x, y, z = _bump_tuple(version_from_main(main_ref), bump_type)
     new_version = f"{x}.{y}.{z}"
     content = pyproject.read_text()
     updated, count = re.subn(
@@ -171,6 +182,19 @@ def bump_version(main_ref: str, bump_type: str) -> str | None:
     return new_version
 
 
+def bump_version_file(main_ref: str, bump_type: str, version_file: str) -> str | None:
+    """Mirror of bump_version() for repos with no pyproject.toml. Creates version_file
+    with the computed version if it doesn't already exist -- no manual seeding required.
+    """
+    if bump_type == "none":
+        return None
+
+    x, y, z = _bump_tuple(version_from_main(main_ref, version_file), bump_type)
+    new_version = f"{x}.{y}.{z}"
+    Path(version_file).write_text(new_version + "\n")
+    return new_version
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--main-ref", required=True)
@@ -178,6 +202,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exclude-paths", default="")
     parser.add_argument("--strip-dev-only-paths", choices=("true", "false"), required=True)
     parser.add_argument("--bump-type", choices=("patch", "minor", "major", "none"), required=True)
+    parser.add_argument(
+        "--version-file",
+        default="",
+        help="Bare X.Y.Z file (e.g. VERSION) to bump instead of pyproject.toml, for a repo "
+        "with no pyproject.toml. Empty (default) preserves the existing pyproject.toml path.",
+    )
     return parser.parse_args()
 
 
@@ -189,7 +219,10 @@ def main() -> int:
         restore_main_owned_paths(args.main_ref, args.exclude_paths)
         if strip_dev_only:
             strip_dev_only_paths()
-        new_version = bump_version(args.main_ref, args.bump_type)
+        if args.version_file:
+            new_version = bump_version_file(args.main_ref, args.bump_type, args.version_file)
+        else:
+            new_version = bump_version(args.main_ref, args.bump_type)
     except (ReconcileError, subprocess.CalledProcessError) as error:
         run("git", "merge", "--abort", check=False)
         print(f"::error::{error}", file=sys.stderr)
