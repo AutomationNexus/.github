@@ -18,6 +18,12 @@ jobs:
     uses: automationnexus/.github/.github/workflows/ci.yml@v1
     with:
       branch-model: main-dev
+      # This template repo itself has no live 'dev' branch (bootstrap-repo.sh only creates
+      # one on a repo derived from this template) -- fall Guard Main Source Branch back to
+      # main-only-style acceptance of any feature branch for direct contributions to this
+      # template repo. A repo bootstrapped from this template gets a real 'dev' branch and
+      # should flip this back to true (or omit it) once bootstrapped.
+      main-source-require-dev: false
       # Private repo? set true and rely on guards (no rulesets on Free plan).
       auto-revert: false
       runner-labels: '["ubuntu-latest"]'
