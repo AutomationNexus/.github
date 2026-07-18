@@ -625,7 +625,15 @@ jobs:
           if [ ! -f secrets.yaml ] && [ -f secrets.yaml.example ]; then
             cp secrets.yaml.example secrets.yaml
           fi
-          docker run --rm -v "$PWD:/config" ghcr.io/home-assistant/home-assistant:stable \
+          # Pinned (not :stable): HA core rewrote the homeassistant start/shutdown
+          # trigger internals, breaking `platform: homeassistant` / `event: start`
+          # configs against the floating tag (see the 2026-06-30 dev-blog post,
+          # "Deprecation of the home_assistant_start flag of async_initialize_triggers",
+          # https://developers.home-assistant.io/blog/2026/06/30/async-initialize-triggers-home-assistant-start-deprecated/).
+          # 2026.6.4 is the last release before that rewrite line landed. Bumping
+          # this pin is a deliberate, tested action (verify consumer configs still
+          # validate) — not something to do casually.
+          docker run --rm -v "$PWD:/config" ghcr.io/home-assistant/home-assistant:2026.6.4 \
             python -m homeassistant --script check_config --config /config
 
   addon-validate:
