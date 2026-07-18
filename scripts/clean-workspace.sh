@@ -109,10 +109,15 @@ for path in "${WORKSPACE_ROOT}"/*/; do
   # under `set -e`, so a non-zero return would abort the whole sweep.
   header() { if [ "$header_printed" -eq 0 ]; then log "== ${name} =="; header_printed=1; fi; return 0; }
 
-  # 1) Agent worktrees under .claude/worktrees/ whose branch is merged and clean.
+  # 1) Non-primary worktrees whose branch is merged and clean. Covers both harness
+  #    isolation sandboxes under .claude/worktrees/ AND manually-created sibling
+  #    worktrees (git worktree add ../<repo>-<purpose>) -- both leak the same way.
+  #    The primary worktree (the clone itself) is never removed.
+  primary_wt=""
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
-    case "$wt" in *"/.claude/worktrees/"*) ;; *) continue ;; esac
+    # git always lists the primary worktree first; skip it (never remove the clone).
+    if [ -z "$primary_wt" ]; then primary_wt="$wt"; continue; fi
     wbr="$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
     if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
       header; note "KEEP worktree ${wt##*/} [${wbr}] -- uncommitted changes"; kept=$((kept+1)); continue
