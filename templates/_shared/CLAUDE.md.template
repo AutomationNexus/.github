@@ -13,6 +13,10 @@
   <!-- If this is a main-only repo (group D), replace with: "This repo is main-only;
        no dev branch. Feature branch -> PR -> CI -> merge to main." -->
 - Never push directly to `dev` or `main`. Feature branch prefix: `<PREFIX>-` (e.g. `<PREFIX>-fix-thing`).
+- Working a tracked issue: create the branch with `gh issue develop <n> --checkout --name
+  <PREFIX>-<slug>` instead of a plain `git checkout -b` — it links the branch to the issue
+  (`Issue.linkedBranches`), which is what lets the org Delivery board auto-set Status to
+  **In Progress**.
 - Enable the local pre-push guard once per clone: `tools\install-githooks.cmd`.
 - Start every task with `git status --short --branch`.
 
