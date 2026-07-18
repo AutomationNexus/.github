@@ -162,6 +162,12 @@ org_commands:
     entry_conditions: workspace/ canonical changed and the workspace root needs refreshing.
     outputs: [drift-report]
 
+  - name: /clean-workspace
+    owner: platform-engineer
+    confirmation_class: human-confirmation-required
+    entry_conditions: Merged-work git leftovers (stale worktrees, merged local branches, parked checkouts) accumulated in the workspace-root clones; run after multi-agent sweeps. --check dry-run is read-only; --prune requires confirmation.
+    outputs: [prune-report]
+
   - name: /new-repo
     owner: chief-architect
     confirmation_class: human-confirmation-required
