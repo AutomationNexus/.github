@@ -7,16 +7,24 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 | Workflow | Purpose | Key inputs / secrets |
 |----------|---------|----------------------|
 | `ci.yml` | Unified CI: guards + hygiene + lint + test + optional frontend/e2e/integration/security/ha/addon | `branch-model`, `auto-revert`, `runner-labels`, `has-*`, `lint-paths`, `security-paths`, `pip-install-cmd`, `test-cmd`, `pre/post-test-cmd`, e2e-* · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
-| `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | `main-only` (bool, default `false`; repo has no `dev` branch, so `feature→main` PRs are squash-merged the same way `feature→dev` PRs are) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
-| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (main-owned paths restored after a throwaway branch based on current main merges dev), `strip-dev-only-paths` (bool; deletes files matching `.github/dev-only-paths` from the promote branch, e.g. `CLAUDE.md`/`.claude/`), `bump-type` (`patch`/`minor`/`major`/`none`, default `patch`; bumps `pyproject.toml`'s version off the latest `vX.Y.Z` tag reachable on main, folded into the promote branch) · CI-Bot secrets |
+| `auto-merge.yml` | Waits for PR checks, then merges via CI-Bot App | `main-only` (bool, default `false`; repo has no `dev` branch, so `feature→main` PRs are squash-merged the same way `feature→dev` PRs are) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key`. Also fires best-effort delivery-board fast-path dispatches: on a PR opened/reopened against `dev` (In Review) and after a successful merge (per-issue for a `dev` merge, full-sweep for a `main` merge) |
+| `promote-dev-to-main.yml` | Verifies dev CI, opens dev→main PR, waits for its CI, merges | `runner-labels`, `exclude-paths` (main-owned paths restored after a throwaway branch based on current main merges dev), `strip-dev-only-paths` (bool; deletes files matching `.github/dev-only-paths` from the promote branch, e.g. `CLAUDE.md`/`.claude/`), `bump-type` (`patch`/`minor`/`major`/`none`, default `patch`; bumps `pyproject.toml`'s version off the latest `vX.Y.Z` tag reachable on main, folded into the promote branch) · CI-Bot secrets. Also fires best-effort delivery-board full-sweep dispatches (Promote Pending, then Released) |
 | `nightly.yml` | Nightly Docker build from dev | `image-name`, `platforms`, `force_run`, `has-frontend`, `coverage-threshold`, `pip-install-cmd`, `test-cmd` |
 | `release-docker.yml` | Tag (from pyproject) → build/push GHCR → Release → Trivy | `image-name`, `platforms`, `tag_name`, `has-frontend`, `has-validation` |
 | `release-pypi.yml` | Tag (from pyproject) → build wheel → PyPI upload (token) → Release | `has-frontend`, `tag_name` · secret: `pypi-api-token` |
 | `semgrep.yml` | SAST scan | none |
 | `docs.yml` | MkDocs Material → GitHub Pages | none |
-| `add-to-project.yml` | Adds the triggering issue/PR to the org delivery Project (event-driven intake; complements `org-project-sync.yml`'s scheduled reconciliation) | `project-url` (default `https://github.com/orgs/AutomationNexus/projects/1`) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
+| `add-to-project.yml` | Adds the triggering issue/PR to the org delivery Project (event-driven intake), then fires a best-effort `repository_dispatch` fast-path sync so the new issue's Status doesn't wait for `org-project-sync.yml`'s hourly cron | `project-url` (default `https://github.com/orgs/AutomationNexus/projects/1`) · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 
 Tag: `@v1` (stable) tracks the current release; pin to a commit SHA for stricter security.
+
+## Composite actions (`.github/actions/`)
+
+| Action | Purpose | Key inputs / secrets |
+|--------|---------|----------------------|
+| `dispatch-project-sync` | Mints a `.github`-scoped CI-Bot token and fires a best-effort `repository_dispatch` (`project-sync`) at `automationnexus/.github`, triggering `org-project-sync.yml`'s near-instant targeted-sync fast path instead of waiting for its hourly cron. A failed dispatch degrades to a `::warning::`, never a step/job failure. | `repo`, `issue-numbers` (space-separated) or `full-sweep: "true"` · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
+
+Reference via the full path — composite actions resolve `owner/repo@ref`, unlike reusable *workflow* files, which run in the caller's own context: `uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1`.
 
 Full delivery-board reference: [`docs/org-project.md`](docs/org-project.md); human quickstart: [`docs/board-guide.md`](docs/board-guide.md).
 

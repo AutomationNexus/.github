@@ -278,6 +278,49 @@ repositories:
       date, Target date) was dropped from bootstrap-org-project.sh and
       board-digest.yml/docs, since none of it was read or written by any
       automation. See docs/org-project.md for the full derived-status model.
+      2026-07-18 (branch feat/board-sync-fast-path): delivery board Status
+      automation gained a repository_dispatch fast path so a merge/PR/intake
+      event no longer waits for org-project-sync.yml's hourly cron (real
+      2-3 hour gaps observed live, e.g. Uploadarr #66/#67 stuck In Progress
+      20+ min after merge). New composite action
+      .github/actions/dispatch-project-sync fires a best-effort dispatch;
+      add-to-project.yml, auto-merge.yml (new dispatch-in-review job plus
+      post-merge dispatches), and promote-dev-to-main.yml (inlined
+      dispatch_project_sync_full_sweep(), using a second, narrowly-scoped
+      .github-only token isolated from the primary push/merge token) all
+      call it. org-project-sync.yml refactored to hoist
+      RANK/STATUS_BUCKET/release_ref()/released_or_ondev()/pr_stage() to
+      module scope and extract a shared classify_and_set() used by both the
+      full reconcile() sweep and the new targeted_sync() single-issue path
+      -- zero duplicated classification logic between the two. Also
+      implements the previously undocumented/manual-only "In Progress"
+      status automatically, via the issue's linkedBranches GraphQL
+      connection (gh issue develop --checkout or the issue page's "Create a
+      branch" button -- not a plain git checkout -b). Companion hardening:
+      auto-merge.yml's and promote-dev-to-main.yml's pre-existing Mint
+      CI-Bot token steps narrowed from unscoped installation-wide tokens to
+      an explicit repositories list (still default/all-permissions for that
+      repo, deliberately unchanged since existing merge/promote steps
+      already relied on that breadth); each of those workflows separately
+      gained a brand-new, wholly distinct .github-only Contents:write token
+      used only for the dispatch call (and, in promote-dev-to-main.yml, the
+      shared-workflow helper checkout) -- this second token is an addition,
+      not a narrowing of the first. Requires the CI-Bot App to gain an
+      org-installation-level Contents:write grant reaching .github itself
+      for the dispatch endpoint to work -- see the new
+      board-sync-cross-repo-dispatch exceptions entry below and
+      docs/org-project.md's "Fast path (repository_dispatch)" section.
+      IMPORTANT (security-audit finding, unresolved as of this note):
+      because a GitHub App installation token's permissions aren't scoped
+      per call-site, granting the App org-installation-level Contents:write
+      reaching .github means every consumer repo's *existing*
+      ci-bot-app-id/ci-bot-app-private-key secrets -- not just this new
+      composite action's usage of them -- can mint an equivalent
+      .github-scoped Contents:write token from any workflow step in that
+      repo. The grant widens the blast radius of every consumer repo's
+      already-present CI-Bot secret, not just this dispatch mechanism.
+      Confirm .github's branch protection covers this before the grant is
+      made (see board-sync-cross-repo-dispatch exceptions entry below).
 
   - repo: CognitiveSystems
     class: full
@@ -530,3 +573,48 @@ exceptions:
       promotion requires.
     owner: automationnexus-app-maintainers
     review_trigger: scope of the push-triggered path expands beyond modeldeck/**.
+
+  - id: board-sync-cross-repo-dispatch
+    description: >
+      The delivery-board fast path (add-to-project.yml, auto-merge.yml,
+      promote-dev-to-main.yml) mints a .github-scoped CI-Bot token from each
+      consumer repo's own workflow run and fires a repository_dispatch at
+      automationnexus/.github's /dispatches endpoint to trigger
+      org-project-sync.yml's near-instant targeted_sync() path, ahead of its
+      hourly cron. This requires the CI-Bot GitHub App to hold an
+      org-installation-level Contents:write grant reaching .github itself --
+      broader than a typical consumer repo's own CI-Bot grant, since every
+      one of the app/pypi/docker/ha-config repos can now write (a narrow,
+      dispatch-only surface) to .github's event stream, not just read
+      shared-workflow content from it. Best-effort and fail-open by design: a
+      missing grant or failed dispatch degrades to a ::warning:: and the
+      hourly cron sweep, never a job failure -- see docs/org-project.md's
+      "Fast path (repository_dispatch)" section.
+
+      Blast-radius note: GitHub App installation-token permissions are not
+      scoped per call-site -- they're a property of the App's installation
+      grant. Once the org-installation-level Contents:write grant reaching
+      .github exists, every consumer repo's own pre-existing
+      ci-bot-app-id/ci-bot-app-private-key secrets (already present for that
+      repo's own CI-Bot mints, unrelated to this dispatch mechanism) can
+      mint an equivalent .github-scoped Contents:write token from any
+      workflow step in that repo -- not only via this composite action's
+      code path. Contents:write also permits pushing new branches/refs to
+      .github, not just firing repository_dispatch events. This is an
+      accepted, reviewed tradeoff (the alternative -- a distinct narrower
+      GitHub App per consumer repo -- was judged not worth the operational
+      overhead for a fail-open, best-effort latency optimization), not an
+      oversight, but it means the actual security boundary here is
+      .github's branch protection (protect-master ruleset) plus this
+      exception's review_trigger, not the token's nominal narrow scope.
+    owner: automationnexus-platform
+    review_trigger: >
+      a consumer repo's dispatch payload gains fields beyond
+      {owner, repo, issue_number|full_sweep}; any repo other than .github
+      becomes a repository_dispatch target from this mechanism; the
+      org-installation Contents:write grant reaching .github is widened
+      beyond Contents (permission-scope creep on the CI-Bot App's
+      installation, which -- per the blast-radius note above -- affects
+      every consumer repo's existing secret, not just this dispatch path);
+      or .github's protect-master ruleset changes in a way that would let a
+      Contents:write token bypass required review.

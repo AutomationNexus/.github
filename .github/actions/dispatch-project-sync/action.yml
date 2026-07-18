@@ -1,0 +1,90 @@
+name: Dispatch project sync
+description: >-
+  Mints a .github-scoped CI-Bot App token and fires a repository_dispatch
+  event (event_type: project-sync) at automationnexus/.github. This triggers
+  org-project-sync.yml's near-instant targeted-sync fast path instead of
+  waiting for its hourly cron -- see org-project-sync.yml's
+  repository_dispatch trigger / targeted_sync() and docs/org-project.md's
+  "Fast path (repository_dispatch)" section. Best-effort: a failed dispatch
+  becomes a ::warning::, never a step/job failure -- the hourly sweep remains
+  the real reconciliation safety net. Reference from another shared workflow
+  via the full path (actions resolve via owner/repo@ref, unlike reusable
+  *workflow* files, which run in the caller's context):
+  `uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1`
+
+inputs:
+  ci-bot-app-id:
+    description: CI-Bot GitHub App ID (caller's secrets.ci-bot-app-id)
+    required: true
+  ci-bot-app-private-key:
+    description: CI-Bot GitHub App private key (caller's secrets.ci-bot-app-private-key)
+    required: true
+  owner:
+    description: Org/owner that owns both the calling repo and .github
+    required: false
+    default: AutomationNexus
+  repo:
+    description: Name of the repository whose issue(s) changed (not .github -- the dispatch target is always .github)
+    required: true
+  issue-numbers:
+    description: >-
+      Space-separated issue number(s) to targeted-sync (zero, one, or many). One dispatch
+      is fired per number. Ignored when full-sweep is "true".
+    required: false
+    default: ""
+  full-sweep:
+    description: >-
+      "true" to request a full reconciliation sweep instead of per-issue targeting -- e.g.
+      a promote PR folds multiple issues together, so no single issue target applies.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Mint .github-scoped CI-Bot token
+      id: dot-github-token
+      uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+      with:
+        app-id: ${{ inputs.ci-bot-app-id }}
+        private-key: ${{ inputs.ci-bot-app-private-key }}
+        owner: ${{ inputs.owner }}
+        repositories: .github
+        permission-contents: write
+
+    - name: Fire project-sync dispatch(es)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.dot-github-token.outputs.token }}
+        OWNER: ${{ inputs.owner }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBERS: ${{ inputs.issue-numbers }}
+        FULL_SWEEP: ${{ inputs.full-sweep }}
+      run: |
+        set -uo pipefail
+        # Best-effort fast path: no -e here on purpose. A dispatch failure
+        # (e.g. tested before the CI-Bot App's org-installation-level
+        # Contents:write grant on .github exists, or a transient API error)
+        # must never fail the caller's job -- the hourly org-project-sync.yml
+        # cron sweep is the real reconciliation safety net, this is only a
+        # latency optimization.
+
+        dispatch() {
+          if ! gh api "repos/${OWNER}/.github/dispatches" \
+              -f event_type=project-sync \
+              -f "client_payload[owner]=${OWNER}" \
+              -f "client_payload[repo]=${REPO}" \
+              "$@" >/dev/null 2>&1; then
+            echo "::warning::project-sync dispatch failed for ${OWNER}/${REPO} (best-effort fast path; the hourly cron remains the safety net)."
+          fi
+        }
+
+        if [ "${FULL_SWEEP}" = "true" ]; then
+          dispatch -F "client_payload[full_sweep]=true"
+        elif [ -n "${ISSUE_NUMBERS}" ]; then
+          for n in ${ISSUE_NUMBERS}; do
+            dispatch -F "client_payload[issue_number]=${n}"
+          done
+        else
+          echo "::notice::dispatch-project-sync called with no issue-numbers and full-sweep=false; nothing to dispatch."
+        fi

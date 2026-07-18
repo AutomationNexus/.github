@@ -9,7 +9,10 @@
 # on github.event_name == 'issues' so a pull_request trigger is a harmless
 # no-op rather than adding a duplicate PR card.
 # This is a narrower, event-driven complement to org-project-sync.yml (which
-# reconciles Status on a schedule); this workflow only performs intake.
+# reconciles Status on a schedule, plus a repository_dispatch fast path --
+# see docs/org-project.md's "Fast path (repository_dispatch)" section); this
+# workflow performs intake, then fires a best-effort dispatch so the newly
+# added issue's Status lands without waiting for the next hourly cron tick.
 name: Add to project
 
 on:
@@ -63,3 +66,12 @@ jobs:
         with:
           project-url: ${{ inputs.project-url }}
           github-token: ${{ steps.bot-token.outputs.token }}
+
+      - name: Dispatch fast-path project sync
+        if: always()
+        uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1
+        with:
+          ci-bot-app-id: ${{ secrets.ci-bot-app-id }}
+          ci-bot-app-private-key: ${{ secrets.ci-bot-app-private-key }}
+          repo: ${{ github.event.repository.name }}
+          issue-numbers: ${{ github.event.issue.number }}

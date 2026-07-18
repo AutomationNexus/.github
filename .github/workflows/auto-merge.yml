@@ -8,6 +8,12 @@ name: Auto-merge
 #   feature → dev             : squash merge
 #   dev → main                : merge commit (preserves history for releases)
 #   feature → main (main-only): squash merge (only when caller passes main-only: true)
+#
+# Also fires best-effort delivery-board fast-path dispatches (never fails
+# this workflow) via dispatch-project-sync -- see docs/org-project.md's
+# "Fast path (repository_dispatch)" section: dispatch-in-review on a PR
+# opened/reopened against dev, and two post-merge dispatches in the `enable`
+# job (per-issue for a dev merge, full-sweep for a main merge).
 
 on:
   workflow_call:
@@ -50,6 +56,24 @@ jobs:
         with:
           app-id: ${{ secrets.ci-bot-app-id }}
           private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          # Any permission-* input switches create-github-app-token from its
+          # "all permissions the App has for these repos" default into
+          # explicit-only mode -- so every permission this token is actually
+          # used for below must be listed here. Companion hardening: narrows
+          # this pre-existing mint from an unscoped, installation-wide token
+          # (which would silently inherit the new org-installation-level
+          # Contents:write on .github once that's granted) down to just this
+          # repo, with only the permissions the Wait-for-checks/Merge steps
+          # below actually need. The post-merge closingIssuesReferences
+          # lookup deliberately does NOT reuse this token -- see its own
+          # dedicated read-only mint below, matching dispatch-in-review's
+          # pattern -- so this merge-authority token never needs
+          # permission-issues here.
+          permission-actions: read
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Wait for PR checks
         env:
@@ -108,3 +132,123 @@ jobs:
             gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
           fi
           echo "Merged PR #${PR} (${BASE} target, main-only=${MAIN_ONLY})."
+
+      # Board fast-path (best-effort, never fails this job): a merge to dev
+      # dispatches per-issue (the merged PR's linked issues move to On
+      # Dev/Released depending on release-reachability -- see
+      # org-project-sync.yml's pr_stage()); a merge to main dispatches a
+      # full sweep instead, since that covers both a dev→main promote merge
+      # and a main-only repo's feature→main merge, both already handled
+      # correctly by pr_stage()'s existing logic without per-issue
+      # resolution.
+      - name: Mint read-only token for post-merge dispatch
+        id: post-merge-read-token
+        if: success() && github.event.pull_request.base.ref == 'dev'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          # Dedicated minimal-scope token for the closingIssuesReferences
+          # read below -- deliberately not the primary bot-token (which
+          # carries contents:write/pull-requests:write merge authority).
+          # Matches dispatch-in-review's identical pattern for the same
+          # query shape.
+          permission-issues: read
+          permission-pull-requests: read
+
+      - name: Resolve linked issues for post-merge dispatch
+        id: post-merge-linked
+        if: success() && github.event.pull_request.base.ref == 'dev'
+        env:
+          GH_TOKEN: ${{ steps.post-merge-read-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          owner="${REPO%%/*}"
+          repo_name="${REPO#*/}"
+          numbers=$(gh api graphql \
+            -f query='query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){ closingIssuesReferences(first:20){ nodes { number } } } } }' \
+            -f owner="$owner" -f repo="$repo_name" -F number="$PR" \
+            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].number] | join(" ")' 2>/dev/null)
+          rc=$?
+          if [ $rc -ne 0 ] || [ -z "${numbers}" ]; then
+            echo "::notice::PR #${PR} has no closing-keyword-linked issues (or lookup failed); skipping post-merge fast-path dispatch. An unlinked PR is invisible to the sync no matter how far along it is -- see docs/board-guide.md."
+            echo "numbers=" >> "$GITHUB_OUTPUT"
+          else
+            echo "numbers=${numbers}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch fast-path sync (dev merge, per-issue)
+        if: success() && github.event.pull_request.base.ref == 'dev' && steps.post-merge-linked.outputs.numbers != ''
+        uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1
+        with:
+          ci-bot-app-id: ${{ secrets.ci-bot-app-id }}
+          ci-bot-app-private-key: ${{ secrets.ci-bot-app-private-key }}
+          repo: ${{ github.event.repository.name }}
+          issue-numbers: ${{ steps.post-merge-linked.outputs.numbers }}
+
+      - name: Dispatch fast-path sync (main merge, full sweep)
+        if: success() && github.event.pull_request.base.ref == 'main'
+        uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1
+        with:
+          ci-bot-app-id: ${{ secrets.ci-bot-app-id }}
+          ci-bot-app-private-key: ${{ secrets.ci-bot-app-private-key }}
+          repo: ${{ github.event.repository.name }}
+          full-sweep: "true"
+
+  dispatch-in-review:
+    name: Dispatch In Review fast-path sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only a genuinely new open-against-dev PR should trigger this -- not
+    # `synchronize` (an issue already In Review stays In Review; no rank
+    # change), and not a draft (not yet ready for the In Review stage).
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.base.ref == 'dev' &&
+      (github.event.action == 'opened' || github.event.action == 'reopened')
+    steps:
+      - name: Mint read-only token
+        id: read-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: read
+          permission-pull-requests: read
+
+      - name: Resolve linked issues
+        id: linked
+        env:
+          GH_TOKEN: ${{ steps.read-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          owner="${REPO%%/*}"
+          repo_name="${REPO#*/}"
+          numbers=$(gh api graphql \
+            -f query='query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){ closingIssuesReferences(first:20){ nodes { number } } } } }' \
+            -f owner="$owner" -f repo="$repo_name" -F number="$PR" \
+            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].number] | join(" ")' 2>/dev/null)
+          rc=$?
+          if [ $rc -ne 0 ] || [ -z "${numbers}" ]; then
+            echo "::notice::PR #${PR} has no closing-keyword-linked issues (or lookup failed); skipping fast-path dispatch. An unlinked PR is invisible to the sync no matter how far along it is -- see docs/board-guide.md."
+            echo "numbers=" >> "$GITHUB_OUTPUT"
+          else
+            echo "numbers=${numbers}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch fast-path project sync
+        if: steps.linked.outputs.numbers != ''
+        uses: automationnexus/.github/.github/actions/dispatch-project-sync@v1
+        with:
+          ci-bot-app-id: ${{ secrets.ci-bot-app-id }}
+          ci-bot-app-private-key: ${{ secrets.ci-bot-app-private-key }}
+          repo: ${{ github.event.repository.name }}
+          issue-numbers: ${{ steps.linked.outputs.numbers }}

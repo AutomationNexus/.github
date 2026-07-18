@@ -33,7 +33,7 @@ LEAN:**
 |-------|----------|-------|
 | Custom fields + Status stages | `scripts/bootstrap-org-project.sh` | Field creation is idempotent; the Status *options* step is create-only (fresh boards only) — see the script's own comments |
 | Item intake (issues only) | `.github/workflows/add-to-project.yml` | Reusable workflow every repo calls; gated to `issues` events — see "Per-repo intake" below |
-| Status (derived from linked PRs) + Area/Type auto-fill | `.github/workflows/org-project-sync.yml` | Runs hourly (cron `:17`) plus manual dispatch |
+| Status (derived from linked PRs/branches) + Area/Type auto-fill | `.github/workflows/org-project-sync.yml` | Runs hourly (cron `:17`) as the safety net, plus a `repository_dispatch` fast path and manual dispatch — see "Fast path (repository_dispatch)" below |
 | Saved views, native **Iteration** field | Humans, in the UI | The GitHub API cannot create these |
 
 ## Fields
@@ -79,8 +79,12 @@ by rank — see the rank table below). If **no** linked PR is classifiable:
   versioned release — meta/decision work, a `.github`-only change, wontfix,
   etc.) — skipped rather than failing if the board doesn't have the `Done`
   option yet;
-- an **open** issue with no status yet defaults to **Backlog** (existing
-  default; never overrides an existing status).
+- an **open** issue with an **active linked branch** (via `gh issue develop
+  --checkout` or the issue page's "Create a branch" button — a plain `git
+  checkout -b` never populates this) goes to **In Progress**, resolved via
+  the GraphQL `linkedBranches` connection on the issue;
+- an **open** issue with no status yet and no active linked branch defaults
+  to **Backlog** (existing default; never overrides an existing status).
 
 Status only ever **advances**, never regresses: `Backlog(0) < In
 Progress(1) < In Review(2) < On Dev(3) < Promote Pending(4) < Done(5) <
@@ -170,20 +174,77 @@ Before it will run:
 1. Grant the **CI-Bot GitHub App** the org permission
    `organization_projects: write` (Settings → GitHub Apps → CI-Bot → Permissions),
    and accept the permission update for the org install.
-2. Store `CI_BOT_APP_ID` and `CI_BOT_APP_PRIVATE_KEY` as repo secrets on `.github` (or as
+2. Grant the **CI-Bot GitHub App** an org-installation-level `Contents: write`
+   permission scoped to (at least) the `.github` repo itself. This is what lets
+   `dispatch-project-sync`'s `.github`-scoped token mint (used by
+   `add-to-project.yml`, `auto-merge.yml`, and `promote-dev-to-main.yml`) call
+   `.github`'s `repository_dispatch` REST endpoint (`POST
+   repos/AutomationNexus/.github/dispatches`) — see "Fast path
+   (repository_dispatch)" below. Until this grant exists, every fast-path
+   dispatch attempt fails closed to a `::warning::` and the hourly cron
+   remains the only path that actually reconciles Status.
+3. Store `CI_BOT_APP_ID` and `CI_BOT_APP_PRIVATE_KEY` as repo secrets on `.github` (or as
    selected organization secrets reachable from it). `org-project-sync.yml` reads them
    directly by these exact (uppercase) names — it is triggered by `workflow_dispatch`/
-   `schedule`, not `workflow_call`, so no secret-name aliasing is involved here (that only
-   applies to `add-to-project.yml`'s reusable-workflow `secrets:` input names — see "Per-repo
-   intake" below).
-3. Run **Org Project Sync** manually with `dry_run: true` first. Manual dry runs never
+   `schedule`/`repository_dispatch`, not `workflow_call`, so no secret-name aliasing is
+   involved here (that only applies to `add-to-project.yml`'s reusable-workflow `secrets:`
+   input names — see "Per-repo intake" below).
+4. Run **Org Project Sync** manually with `dry_run: true` first. Manual dry runs never
    mutate Project items; set `dry_run: false` only after reviewing the summary. The hourly
-   schedule event runs in mutation mode automatically. The summary reports issues scanned,
-   non-issue (legacy PR) items, linked PRs resolved, would-update/actual-updated/
-   already-correct counts, target-stage buckets (including `Done`), and regressions
-   suppressed. It does not post comments.
-4. Rotate or revoke credentials by revoking the old App key, replacing the local secret
+   schedule event, and every `repository_dispatch` fast-path run, runs in mutation mode
+   automatically (`dry_run` only applies to `workflow_dispatch`). The summary reports issues
+   scanned, non-issue (legacy PR) items, linked PRs resolved, would-update/actual-updated/
+   already-correct counts, target-stage buckets (including `In Progress` and `Done`), and
+   regressions suppressed. It does not post comments.
+5. Rotate or revoke credentials by revoking the old App key, replacing the local secret
    value, and repeating the dry run. Never print or commit secret values.
+
+## Fast path (repository_dispatch)
+
+Waiting up to an hour for the `:17` cron to notice a merge is too slow for
+day-to-day use, so several consumer-facing workflows fire a best-effort
+`repository_dispatch` at `automationnexus/.github` right after the event that
+would move an issue's Status, instead of (or ahead of) waiting for the next
+scheduled sweep:
+
+| Caller | When | Payload |
+|---|---|---|
+| `add-to-project.yml` | after adding a new issue to the Project | `issue_number` (the triggering issue) |
+| `auto-merge.yml` (`dispatch-in-review` job) | a PR is opened/reopened against `dev` (not draft) | `issue_number`(s) — the PR's closing-keyword-linked issues |
+| `auto-merge.yml` (`enable` job, post-merge) | a PR merges to `dev` | `issue_number`(s) — the merged PR's closing-keyword-linked issues |
+| `auto-merge.yml` (`enable` job, post-merge) | a PR merges to `main` | `full_sweep` |
+| `promote-dev-to-main.yml` | the promote PR is confirmed to exist (Promote Pending), and again once it merges (Released) | `full_sweep` — a promote PR folds multiple issues together, so no single issue target applies |
+
+Mechanically, each caller uses the `dispatch-project-sync` composite action
+(`.github/actions/dispatch-project-sync/action.yml`; `promote-dev-to-main.yml`
+inlines the equivalent `gh api` call instead, since its control flow is one
+long retried script rather than discrete steps) to mint a `.github`-scoped
+CI-Bot token and `POST repos/AutomationNexus/.github/dispatches` with
+`event_type: project-sync` and a JSON `client_payload` of either
+`{owner, repo, issue_number}` or `{owner, repo, full_sweep: true}`.
+`org-project-sync.yml`'s `repository_dispatch` trigger picks this up and runs
+`targeted_sync(payload)` instead of the full `reconcile()` sweep — either a
+single-issue GraphQL fetch + classify (an `issue_number` payload) or
+`reconcile()` itself verbatim (a `full_sweep` payload).
+
+This is a **latency optimization, not a new source of truth**: every
+dispatch is best-effort (`set -uo pipefail`, no `-e`) and a failed dispatch
+becomes a `::warning::`, never a step/job failure — the hourly cron sweep is
+still what actually guarantees eventual consistency. A missing or misfiring
+dispatch (e.g. before the `Contents: write` grant above exists) just means an
+issue's Status is stale for up to an hour, exactly like before this fast path
+existed.
+
+Note on bursts: `org-project-sync.yml`'s `concurrency: cancel-in-progress:
+false` protects the *currently running* sweep from being cancelled, but
+GitHub still cancels a queued (not-yet-started) run in the same group when a
+newer one is queued. A PR closing several issues fires one dispatch per
+issue number — if several land while a cron sweep or another dispatch is
+already running, only the last queued one actually runs; earlier ones in
+that burst are silently superseded. Fail-open by design (the hourly cron
+still catches whatever was dropped), so not incorrect — just means
+near-instant isn't guaranteed for *every* issue in a multi-issue merge
+burst, only eventually-within-the-hour.
 
 A manual `write_probe: true` dispatch runs only a self-contained write test — it creates
 a temporary draft item, sets and verifies its Status, then deletes it — and skips the
@@ -191,7 +252,9 @@ reconciliation sweep entirely; use it to confirm write access before a real run.
 probe always mutates (its whole point is a write test), so it overrides `dry_run`.
 
 The `schedule:` block is active: the sweep runs hourly (`cron: "17 * * * *"`) in mutation
-mode. `workflow_dispatch` remains for manual dry-runs, write probes, and troubleshooting.
+mode as the reconciliation safety net. `repository_dispatch` (see "Fast path
+(repository_dispatch)" above) is the near-instant path for the common case. `workflow_dispatch`
+remains for manual dry-runs, write probes, and troubleshooting.
 
 ## Per-repo intake (`add-to-project.yml`)
 
