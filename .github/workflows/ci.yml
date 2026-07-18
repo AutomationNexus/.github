@@ -21,6 +21,11 @@ on:
         required: false
         default: ""
         type: string
+      main-source-require-dev:
+        description: "main-dev model only: whether Guard Main Source Branch requires PRs into main to come from 'dev' (or main-source-allow-glob). Default true preserves existing behavior. Set false for a branch-model:main-dev caller that has no live 'dev' branch of its own (e.g. the 5 un-bootstrapped template-* repos, which ship main-dev-flavored ci.yml as starter content for repos bootstrap-repo.sh will later give a dev branch, but have no dev branch themselves yet) -- falls back to main-only-style 'any feature branch, not main itself' semantics for this guard only. Does not affect branch-model's other guards (Guard Dev Direct Push / Guard Dev Source Branch), which still no-op safely with no dev branch present."
+        required: false
+        default: true
+        type: boolean
       main-direct-push-allow-pattern:
         description: "Optional JS regex tested against the head commit message, allowing a sanctioned non-bot, non-PR direct push to main to pass Guard Main Direct Push (e.g. the sync-templates.sh resync commit on template-* repos). Empty (default) preserves existing behavior -- no additional direct pushes are allowed. A malformed pattern is logged and ignored (fails safe: does not allow)."
         required: false
@@ -293,6 +298,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           BRANCH_MODEL: ${{ inputs.branch-model }}
           ALLOW_GLOB: ${{ inputs.main-source-allow-glob }}
+          REQUIRE_DEV: ${{ inputs.main-source-require-dev }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" != "main" ]; then
             echo "Not a PR to main — guard does not apply. OK."; exit 0
@@ -303,7 +309,15 @@ jobs:
             fi
             echo "OK — source is a feature branch (main-only model)."; exit 0
           fi
-          # main-dev: must come from dev (or an optional repo-configured allow-glob)
+          # main-dev: must come from dev (or an optional repo-configured allow-glob), unless
+          # main-source-require-dev is false (caller has no live dev branch of its own -- falls
+          # back to main-only-style "any feature branch, not main itself").
+          if [ "$REQUIRE_DEV" != "true" ]; then
+            if [ "$HEAD_REF" = "main" ]; then
+              echo "::error::PRs to main must come from a feature branch."; exit 1
+            fi
+            echo "OK — source is a feature branch (main-dev model, main-source-require-dev: false)."; exit 0
+          fi
           allowed=no
           [ "$HEAD_REF" = "dev" ] && allowed=yes
           if [ "$allowed" = no ] && [ -n "$ALLOW_GLOB" ]; then
