@@ -287,7 +287,9 @@ org agents are not.
 Commands: `/org-status` (status sweep), `/board-status` (delivery-board snapshot),
 `/dispatch` (route a task), `/promote` (dev→main release runbook), `/org-audit`
 (security sweep), `/sync-templates` (template repo sync, human-confirmed),
-`/sync-workspace` (root copy refresh), `/new-repo` (guided repo bootstrap).
+`/sync-workspace` (root copy refresh), `/clean-workspace` (prune merged-work git
+leftovers from the workspace clones, human-confirmed), `/new-repo` (guided repo
+bootstrap).
 
 ### Org-root operating protocol
 
