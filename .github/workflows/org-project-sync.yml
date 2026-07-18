@@ -19,6 +19,8 @@ on:
         default: false
   schedule:
     - cron: "17 * * * *"
+  repository_dispatch:
+    types: [project-sync]
 
 permissions:
   contents: read
@@ -55,6 +57,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
           WRITE_PROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.write_probe || false }}
+          DISPATCH_PAYLOAD: ${{ github.event_name == 'repository_dispatch' && toJSON(github.event.client_payload) || '' }}
         run: |
           python3 - <<'PY'
           import json
@@ -232,25 +235,262 @@ jobs:
               if not verified:
                   fail(f"Write probe verification failed: {assert_error}")
 
-          def reconcile():
-              # Done sits just below Released, not tied with it: an issue
-              # already at Done can still advance to Released if a linked PR
-              # is later found to have actually shipped (Done -> Released is
-              # a correction, not a downgrade), while the never-downgrade
-              # guard below still stops every ordinary pipeline stage
-              # (Backlog..Promote Pending) from overwriting Done, and stops
-              # Done itself from ever overwriting Released. Released remains
-              # the sole ceiling.
-              RANK = {
-                  "Backlog": 0,
-                  "In Progress": 1,
-                  "In Review": 2,
-                  "On Dev": 3,
-                  "Promote Pending": 4,
-                  "Done": 5,
-                  "Released": 6,
+          # Done sits just below Released, not tied with it: an issue
+          # already at Done can still advance to Released if a linked PR
+          # is later found to have actually shipped (Done -> Released is
+          # a correction, not a downgrade), while the never-downgrade
+          # guard below still stops every ordinary pipeline stage
+          # (Backlog..Promote Pending) from overwriting Done, and stops
+          # Done itself from ever overwriting Released. Released remains
+          # the sole ceiling.
+          RANK = {
+              "Backlog": 0,
+              "In Progress": 1,
+              "In Review": 2,
+              "On Dev": 3,
+              "Promote Pending": 4,
+              "Done": 5,
+              "Released": 6,
+          }
+
+          STATUS_BUCKET = {
+              "In Progress": "in_progress_detected",
+              "In Review": "in_review",
+              "On Dev": "on_dev",
+              "Promote Pending": "promote_pending",
+              "Released": "released",
+              "Done": "done",
+          }
+
+          # Hoisted to module scope (out of reconcile()) so targeted_sync()'s
+          # single-issue repository_dispatch fast path can reuse the same
+          # classification helpers without duplicating any logic. Each takes
+          # an explicit `counts` param instead of closing over one, since
+          # reconcile() and targeted_sync() each track their own counts dict.
+          # release_ref_cache persists for the lifetime of one workflow run
+          # (one process) -- same caching behavior as before the refactor.
+          release_ref_cache = {}
+
+          def release_ref(repo, counts):
+              # Latest semver vX.Y.Z tag reachable from main. None if unresolved (e.g. no
+              # release has ever been tagged yet -- reported as "On Dev" until one lands).
+              if repo in release_ref_cache:
+                  return release_ref_cache[repo]
+              ref = None
+              try:
+                  tags = gh("api", "--paginate", f"repos/{OWNER}/{repo}/git/matching-refs/tags/v")
+                  candidates = []
+                  for entry in tags:
+                      name = entry["ref"]
+                      if name.startswith("refs/tags/"):
+                          name = name[len("refs/tags/"):]
+                      match = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", name)
+                      if match:
+                          candidates.append((tuple(int(part) for part in match.groups()), name))
+                  candidates.sort(key=lambda pair: pair[0], reverse=True)
+                  for _, tag_name in candidates:
+                      compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{tag_name}")
+                      if compare.get("status") in ("identical", "behind"):
+                          ref = tag_name
+                          break
+              except Exception:  # noqa: BLE001 - fail-open to None, cached below
+                  counts["ref_resolution_errors"] += 1
+                  ref = None
+              release_ref_cache[repo] = ref
+              return ref
+
+          def released_or_ondev(repo, pr, counts):
+              # #52: decide Released vs On Dev by whether the PR's merge commit is
+              # reachable from main's current tip, not by exact ancestry to the
+              # latest vX.Y.Z tag. Repos whose promote step creates brand-new
+              # commits on main (e.g. ModelDeck's add-on/config-sync chores,
+              # #121) never fast-forward the dev merge OID onto a tagged commit,
+              # so tag-ancestry compare permanently reports "diverged" even
+              # though the change already shipped. compare(main...merge_oid)
+              # instead asks "is merge_oid an ancestor of (or equal to) main
+              # HEAD" - true for both a fast-forwarded release and a
+              # squash/rebuild-style promote that folds the same commit forward,
+              # and false for anything still only on dev (status "ahead" or
+              # "diverged" relative to main). release_ref() is still invoked
+              # here (result unused for the decision) purely so its
+              # ref_resolution_errors accounting/caching keeps reporting tag
+              # lookup health for the summary - see #37.
+              release_ref(repo, counts)
+              merge_oid = (pr.get("mergeCommit") or {}).get("oid")
+              if merge_oid is None:
+                  return "On Dev"
+              try:
+                  compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{merge_oid}")
+                  if compare.get("status") in ("identical", "behind"):
+                      return "Released"
+                  return "On Dev"
+              except Exception:  # noqa: BLE001 - fail-open, never abort the sweep
+                  counts["errors"] += 1
+                  return "On Dev"
+
+          def pr_stage(pr, counts):
+              # Classifies a single linked PR into one pipeline stage, or
+              # None if it isn't (yet) pipeline-classifiable -- e.g. a
+              # `.github` PR merged to `master` (out of REPOS scope), or a
+              # CLOSED-unmerged PR. Reuses the pre-redesign PR-classification
+              # logic verbatim (previously applied to the PR's own board
+              # item; now applied to each of an issue's linked PRs). Pure
+              # function aside from release_ref()/released_or_ondev() above,
+              # which account errors/ref_resolution_errors into the passed
+              # counts dict.
+              repo = pr["repository"]["name"]
+              owner_login = pr["repository"]["owner"]["login"]
+              if owner_login != OWNER or repo not in REPOS:
+                  return None
+              state = pr["state"]
+              if state == "OPEN":
+                  if pr["baseRefName"] == "dev":
+                      return "In Review"
+                  if (
+                      pr["baseRefName"] == "main"
+                      and pr["headRefName"].startswith("sync/publish-main-promote-")
+                  ):
+                      return "Promote Pending"
+                  return None
+              if state == "MERGED" and pr["baseRefName"] == "dev":
+                  return released_or_ondev(repo, pr, counts)
+              if state == "MERGED" and pr["baseRefName"] == "main":
+                  if pr["headRefName"].startswith("sync/publish-main-"):
+                      # A promote-branch (sync/publish-main-promote-*) or any
+                      # other publish-flow branch (e.g. ModelDeck's nightly
+                      # add-on-only sync/publish-main-<version>, or a
+                      # pin-sync push) just landed on main - deliberately
+                      # broader than just the "-promote-" prefix, see gap-2
+                      # notes.
+                      return "Released"
+                  if repo in MAIN_ONLY_REPOS:
+                      # Main-only repos (no dev branch - e.g. ARCRunner)
+                      # merge ordinary feature branches straight to main;
+                      # that merge IS the release, there's no separate
+                      # promote/publish step to wait for.
+                      return "Released"
+                  return None
+              # MERGED to a base other than dev/main, or CLOSED unmerged.
+              return None
+
+          def classify_and_set(entry, counts):
+              # Classifies one issue-item and writes its Status if the
+              # classification advances past the current value. This is the
+              # single source of Status-derivation logic, shared unmodified
+              # by reconcile()'s full sweep (looping over a page of Project
+              # items) and targeted_sync()'s single-issue repository_dispatch
+              # fast path (one ad hoc GraphQL fetch) -- neither caller
+              # duplicates any of the branching below.
+              item_id = entry["item_id"]
+              current = entry["current_status"]
+              issue = entry["issue"]
+              counts["issues_scanned"] += 1
+
+              # The board-digest.yml tracking issue is a perpetual
+              # auto-managed meta-issue, never a real deliverable - skip it
+              # entirely (not just the Done transition) so nothing below
+              # ever touches its Status, even if it's ever closed/reopened.
+              if is_delivery_digest_issue(issue):
+                  counts["digest_issue_skipped"] += 1
+                  return
+              if current == "Released":
+                  counts["released_skipped"] += 1
+                  return
+              if current == "Blocked":
+                  counts["blocked_skipped"] += 1
+                  return
+
+              linked_prs = issue.get("linked_prs") or []
+              counts["linked_prs_resolved"] += len(linked_prs)
+              stages = [pr_stage(pr, counts) for pr in linked_prs]
+              classified = [stage for stage in stages if stage is not None]
+              max_stage = max(classified, key=lambda stage: RANK[stage]) if classified else None
+
+              if max_stage is not None:
+                  # A classifiable linked PR always wins, regardless of the
+                  # issue's own open/closed state - the deliverable's real
+                  # pipeline position is what matters (e.g. a Released
+                  # linked PR means Released even if the issue itself was
+                  # never formally closed).
+                  target = max_stage
+              elif issue["state"] == "CLOSED":
+                  # Closed, no classifiable linked PR: a completed
+                  # deliverable with no versioned release (meta/decision
+                  # work, a .github-only change, wontfix, etc). Only if
+                  # the board actually has the "Done" option yet - it may
+                  # not, until scripts/bootstrap-org-project.sh is next run
+                  # against the live board - skip (not fail) if absent,
+                  # same fail-open pattern as Area/Type above.
+                  if not HAS_DONE:
+                      counts["done_skipped_no_option"] += 1
+                      return
+                  target = "Done"
+              elif issue.get("has_active_linked_branch") and "In Progress" in options:
+                  # A branch is linked to the issue (via `gh issue develop
+                  # --checkout` or the issue page's "Create a branch" button
+                  # -- a plain `git checkout -b` never populates
+                  # linkedBranches) but no classifiable PR yet: actively
+                  # being worked. Falls into the same generic
+                  # rank-compare-and-set tail below unchanged, so the
+                  # never-downgrade rule applies automatically -- In
+                  # Progress (rank 1) only ever gets written when current is
+                  # None (-1) or Backlog (0).
+                  target = "In Progress"
+              else:
+                  # Open issue, no classifiable linked PR, no active linked
+                  # branch: default a status-less item (e.g. a freshly
+                  # auto-added issue) to Backlog. Never overrides an
+                  # existing status.
+                  if current is None and "Backlog" in options:
+                      if not DRY_RUN:
+                          set_status(item_id, options["Backlog"])
+                      counts["backlog_defaulted"] += 1
+                  else:
+                      counts["open_no_pr_unchanged"] += 1
+                  return
+
+              if current is None:
+                  cur_rank = -1
+              elif current in RANK:
+                  cur_rank = RANK[current]
+              else:
+                  counts["manual_unknown_skipped"] += 1
+                  return
+
+              tgt_rank = RANK[target]
+              if tgt_rank == cur_rank:
+                  counts["already_correct"] += 1
+                  return
+              if tgt_rank < cur_rank:
+                  counts["regressions_suppressed"] += 1
+                  return
+
+              counts["would_update"] += 1
+              counts[STATUS_BUCKET[target]] += 1
+              if not DRY_RUN:
+                  set_status(item_id, options[target])
+                  counts["updated"] += 1
+
+          def new_counts():
+              # Shared counts-dict shape for both reconcile()'s full sweep
+              # and targeted_sync()'s single-issue fast path, so
+              # classify_and_set() and either caller's write_summary() can
+              # always rely on every key existing.
+              return {
+                  "issues_scanned": 0, "non_issue_items": 0,
+                  "digest_issue_skipped": 0, "linked_prs_resolved": 0,
+                  "would_update": 0, "updated": 0, "already_correct": 0,
+                  "in_progress_detected": 0, "in_review": 0, "on_dev": 0,
+                  "promote_pending": 0, "released": 0, "done": 0,
+                  "backlog_defaulted": 0, "open_no_pr_unchanged": 0,
+                  "done_skipped_no_option": 0, "released_skipped": 0,
+                  "blocked_skipped": 0, "manual_unknown_skipped": 0,
+                  "regressions_suppressed": 0, "errors": 0,
+                  "ref_resolution_errors": 0,
+                  "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
               }
 
+          def reconcile():
               issue_items = []
               all_items = []
               non_issue_items = 0
@@ -282,6 +522,7 @@ jobs:
                                     repository { name owner { login } }
                                   }
                                 }
+                                linkedBranches(first:5){ nodes { ref { name } } }
                               }
                             }
                             fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
@@ -308,12 +549,14 @@ jobs:
                       current = next((value.get("name") for value in item["fieldValues"]["nodes"]
                                       if value.get("field", {}).get("id") == status["id"]), None)
                       linked_prs = (content.get("closedByPullRequestsReferences") or {}).get("nodes") or []
+                      linked_branches = (content.get("linkedBranches") or {}).get("nodes") or []
                       issue = {
                           "url": content["url"],
                           "state": content["state"],
                           "title": content.get("title"),
                           "repository": content["repository"],
                           "linked_prs": linked_prs,
+                          "has_active_linked_branch": any(node.get("ref") for node in linked_branches),
                       }
                       issue_items.append({
                           "item_id": item["id"],
@@ -335,209 +578,11 @@ jobs:
                       break
                   after = items["pageInfo"]["endCursor"]
 
-              counts = {
-                  "issues_scanned": 0, "non_issue_items": non_issue_items,
-                  "digest_issue_skipped": 0, "linked_prs_resolved": 0,
-                  "would_update": 0, "updated": 0, "already_correct": 0,
-                  "in_review": 0, "on_dev": 0, "promote_pending": 0,
-                  "released": 0, "done": 0,
-                  "backlog_defaulted": 0, "open_no_pr_unchanged": 0,
-                  "done_skipped_no_option": 0, "released_skipped": 0,
-                  "blocked_skipped": 0, "manual_unknown_skipped": 0,
-                  "regressions_suppressed": 0, "errors": 0,
-                  "ref_resolution_errors": 0,
-                  "area_type_set": 0, "area_type_skipped_manual": 0, "area_type_no_match": 0,
-              }
-
-              release_ref_cache = {}
-
-              def release_ref(repo):
-                  # Latest semver vX.Y.Z tag reachable from main. None if unresolved (e.g. no
-                  # release has ever been tagged yet -- reported as "On Dev" until one lands).
-                  if repo in release_ref_cache:
-                      return release_ref_cache[repo]
-                  ref = None
-                  try:
-                      tags = gh("api", "--paginate", f"repos/{OWNER}/{repo}/git/matching-refs/tags/v")
-                      candidates = []
-                      for entry in tags:
-                          name = entry["ref"]
-                          if name.startswith("refs/tags/"):
-                              name = name[len("refs/tags/"):]
-                          match = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", name)
-                          if match:
-                              candidates.append((tuple(int(part) for part in match.groups()), name))
-                      candidates.sort(key=lambda pair: pair[0], reverse=True)
-                      for _, tag_name in candidates:
-                          compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{tag_name}")
-                          if compare.get("status") in ("identical", "behind"):
-                              ref = tag_name
-                              break
-                  except Exception:  # noqa: BLE001 - fail-open to None, cached below
-                      counts["ref_resolution_errors"] += 1
-                      ref = None
-                  release_ref_cache[repo] = ref
-                  return ref
-
-              def released_or_ondev(repo, pr):
-                  # #52: decide Released vs On Dev by whether the PR's merge commit is
-                  # reachable from main's current tip, not by exact ancestry to the
-                  # latest vX.Y.Z tag. Repos whose promote step creates brand-new
-                  # commits on main (e.g. ModelDeck's add-on/config-sync chores,
-                  # #121) never fast-forward the dev merge OID onto a tagged commit,
-                  # so tag-ancestry compare permanently reports "diverged" even
-                  # though the change already shipped. compare(main...merge_oid)
-                  # instead asks "is merge_oid an ancestor of (or equal to) main
-                  # HEAD" - true for both a fast-forwarded release and a
-                  # squash/rebuild-style promote that folds the same commit forward,
-                  # and false for anything still only on dev (status "ahead" or
-                  # "diverged" relative to main). release_ref() is still invoked
-                  # here (result unused for the decision) purely so its
-                  # ref_resolution_errors accounting/caching keeps reporting tag
-                  # lookup health for the summary - see #37.
-                  release_ref(repo)
-                  merge_oid = (pr.get("mergeCommit") or {}).get("oid")
-                  if merge_oid is None:
-                      return "On Dev"
-                  try:
-                      compare = gh("api", f"repos/{OWNER}/{repo}/compare/main...{merge_oid}")
-                      if compare.get("status") in ("identical", "behind"):
-                          return "Released"
-                      return "On Dev"
-                  except Exception:  # noqa: BLE001 - fail-open, never abort the sweep
-                      counts["errors"] += 1
-                      return "On Dev"
-
-              def pr_stage(pr):
-                  # Classifies a single linked PR into one pipeline stage, or
-                  # None if it isn't (yet) pipeline-classifiable -- e.g. a
-                  # `.github` PR merged to `master` (out of REPOS scope), or a
-                  # CLOSED-unmerged PR. Reuses the pre-redesign PR-classification
-                  # logic verbatim (previously applied to the PR's own board
-                  # item; now applied to each of an issue's linked PRs). Pure
-                  # function: release_ref()/released_or_ondev() above are what
-                  # account errors/ref_resolution_errors, not pr_stage itself.
-                  repo = pr["repository"]["name"]
-                  owner_login = pr["repository"]["owner"]["login"]
-                  if owner_login != OWNER or repo not in REPOS:
-                      return None
-                  state = pr["state"]
-                  if state == "OPEN":
-                      if pr["baseRefName"] == "dev":
-                          return "In Review"
-                      if (
-                          pr["baseRefName"] == "main"
-                          and pr["headRefName"].startswith("sync/publish-main-promote-")
-                      ):
-                          return "Promote Pending"
-                      return None
-                  if state == "MERGED" and pr["baseRefName"] == "dev":
-                      return released_or_ondev(repo, pr)
-                  if state == "MERGED" and pr["baseRefName"] == "main":
-                      if pr["headRefName"].startswith("sync/publish-main-"):
-                          # A promote-branch (sync/publish-main-promote-*) or any
-                          # other publish-flow branch (e.g. ModelDeck's nightly
-                          # add-on-only sync/publish-main-<version>, or a
-                          # pin-sync push) just landed on main - deliberately
-                          # broader than just the "-promote-" prefix, see gap-2
-                          # notes.
-                          return "Released"
-                      if repo in MAIN_ONLY_REPOS:
-                          # Main-only repos (no dev branch - e.g. ARCRunner)
-                          # merge ordinary feature branches straight to main;
-                          # that merge IS the release, there's no separate
-                          # promote/publish step to wait for.
-                          return "Released"
-                      return None
-                  # MERGED to a base other than dev/main, or CLOSED unmerged.
-                  return None
-
-              STATUS_BUCKET = {
-                  "In Review": "in_review",
-                  "On Dev": "on_dev",
-                  "Promote Pending": "promote_pending",
-                  "Released": "released",
-                  "Done": "done",
-              }
+              counts = new_counts()
+              counts["non_issue_items"] = non_issue_items
 
               for entry in issue_items:
-                  item_id = entry["item_id"]
-                  current = entry["current_status"]
-                  issue = entry["issue"]
-                  counts["issues_scanned"] += 1
-
-                  # The board-digest.yml tracking issue is a perpetual
-                  # auto-managed meta-issue, never a real deliverable - skip it
-                  # entirely (not just the Done transition) so nothing below
-                  # ever touches its Status, even if it's ever closed/reopened.
-                  if is_delivery_digest_issue(issue):
-                      counts["digest_issue_skipped"] += 1
-                      continue
-                  if current == "Released":
-                      counts["released_skipped"] += 1
-                      continue
-                  if current == "Blocked":
-                      counts["blocked_skipped"] += 1
-                      continue
-
-                  linked_prs = issue.get("linked_prs") or []
-                  counts["linked_prs_resolved"] += len(linked_prs)
-                  stages = [pr_stage(pr) for pr in linked_prs]
-                  classified = [stage for stage in stages if stage is not None]
-                  max_stage = max(classified, key=lambda stage: RANK[stage]) if classified else None
-
-                  if max_stage is not None:
-                      # A classifiable linked PR always wins, regardless of the
-                      # issue's own open/closed state - the deliverable's real
-                      # pipeline position is what matters (e.g. a Released
-                      # linked PR means Released even if the issue itself was
-                      # never formally closed).
-                      target = max_stage
-                  elif issue["state"] == "CLOSED":
-                      # Closed, no classifiable linked PR: a completed
-                      # deliverable with no versioned release (meta/decision
-                      # work, a .github-only change, wontfix, etc). Only if
-                      # the board actually has the "Done" option yet - it may
-                      # not, until scripts/bootstrap-org-project.sh is next run
-                      # against the live board - skip (not fail) if absent,
-                      # same fail-open pattern as Area/Type above.
-                      if not HAS_DONE:
-                          counts["done_skipped_no_option"] += 1
-                          continue
-                      target = "Done"
-                  else:
-                      # Open issue, no classifiable linked PR: default a
-                      # status-less item (e.g. a freshly auto-added issue) to
-                      # Backlog. Never overrides an existing status.
-                      if current is None and "Backlog" in options:
-                          if not DRY_RUN:
-                              set_status(item_id, options["Backlog"])
-                          counts["backlog_defaulted"] += 1
-                      else:
-                          counts["open_no_pr_unchanged"] += 1
-                      continue
-
-                  if current is None:
-                      cur_rank = -1
-                  elif current in RANK:
-                      cur_rank = RANK[current]
-                  else:
-                      counts["manual_unknown_skipped"] += 1
-                      continue
-
-                  tgt_rank = RANK[target]
-                  if tgt_rank == cur_rank:
-                      counts["already_correct"] += 1
-                      continue
-                  if tgt_rank < cur_rank:
-                      counts["regressions_suppressed"] += 1
-                      continue
-
-                  counts["would_update"] += 1
-                  counts[STATUS_BUCKET[target]] += 1
-                  if not DRY_RUN:
-                      set_status(item_id, options[target])
-                      counts["updated"] += 1
+                  classify_and_set(entry, counts)
 
               # Area/Type auto-fill pass: independent of Status above, and a no-op
               # entirely when the board has no Area/Type field. Never overrides a
@@ -589,7 +634,8 @@ jobs:
                   f"- Actual updated: {counts['updated']}",
                   f"- Already correct: {counts['already_correct']}",
                   (
-                      f"- Target buckets: In Review {counts['in_review']}, "
+                      f"- Target buckets: In Progress {counts['in_progress_detected']}, "
+                      f"In Review {counts['in_review']}, "
                       f"On Dev {counts['on_dev']}, "
                       f"Promote Pending {counts['promote_pending']}, "
                       f"Released {counts['released']}, Done {counts['done']}"
@@ -617,8 +663,148 @@ jobs:
                   ),
               ])
 
+          def targeted_sync(payload):
+              # repository_dispatch fast path. A `full_sweep` payload (e.g. a
+              # promote PR that folds multiple issues together, with no
+              # single target) just runs reconcile() verbatim -- see
+              # dispatch-project-sync/action.yml and
+              # promote-dev-to-main.yml's dispatch_project_sync_full_sweep().
+              # Otherwise fetch and classify the one named issue. Status
+              # only, no Area/Type -- that stays an hourly-only enhancement,
+              # keeping this path small.
+              if payload.get("full_sweep"):
+                  reconcile()
+                  return
+
+              repo = payload.get("repo")
+              issue_number = payload.get("issue_number")
+              if not repo or not issue_number:
+                  fail(f"targeted_sync payload missing repo/issue_number: {payload!r}")
+              if repo not in REPOS:
+                  # Mirrors pr_stage()'s own REPOS check above -- a payload
+                  # naming a repo outside the known set (e.g. a typo, or a
+                  # future caller misconfigured) is a no-op, not a query
+                  # against an arbitrary repo. Today this is only
+                  # incidentally guaranteed by the workflow's own token
+                  # being minted with repositories: limited to REPOS (see
+                  # the on:/permissions block above) -- this check makes it
+                  # an explicit, load-bearing guarantee instead.
+                  write_summary([
+                      "### Org Project Sync (targeted)",
+                      f"- Repo {repo!r} is not in the known REPOS set -- skipped.",
+                  ])
+                  return
+              try:
+                  issue_number = int(issue_number)
+              except (TypeError, ValueError):
+                  write_summary([
+                      "### Org Project Sync (targeted)",
+                      f"- Malformed issue_number {issue_number!r} in dispatch payload -- skipped.",
+                  ])
+                  return
+
+              counts = new_counts()
+
+              try:
+                  data = graphql("""
+                query($owner:String!,$repo:String!,$number:Int!){
+                  repository(owner:$owner, name:$repo){
+                    issue(number:$number){
+                      url
+                      state
+                      title
+                      repository { name owner { login } }
+                      closedByPullRequestsReferences(first:20, includeClosedPrs:true){
+                        nodes {
+                          number
+                          state
+                          merged
+                          baseRefName
+                          headRefName
+                          mergeCommit { oid }
+                          repository { name owner { login } }
+                        }
+                      }
+                      linkedBranches(first:5){ nodes { ref { name } } }
+                      projectItems(first:10){
+                        nodes {
+                          id
+                          project { number }
+                          fieldValues(first:100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue {
+                            field { ... on ProjectV2FieldCommon { id } }
+                            name
+                          }}}
+                        }
+                      }
+                    }
+                  }
+                }
+              """, owner=OWNER, repo=repo, number=issue_number)
+              except Exception as exc:  # noqa: BLE001 - fail-open, mirrors reconcile()'s per-page handling
+                  counts["errors"] += 1
+                  write_summary([
+                      "### Org Project Sync (targeted)",
+                      f"- GraphQL lookup failed for {repo}#{issue_number}: {exc} -- skipped "
+                      f"(best-effort fast path; the hourly cron sweep remains the safety net).",
+                  ])
+                  return
+
+              issue_node = (data.get("repository") or {}).get("issue")
+              if not issue_node:
+                  write_summary([
+                      "### Org Project Sync (targeted)",
+                      f"- Issue {repo}#{issue_number} not found (deleted/transferred?) -- skipped.",
+                  ])
+                  return
+
+              project_item = next(
+                  (candidate for candidate in (issue_node.get("projectItems") or {}).get("nodes", [])
+                   if (candidate.get("project") or {}).get("number") == NUMBER),
+                  None,
+              )
+              if project_item is None:
+                  write_summary([
+                      "### Org Project Sync (targeted)",
+                      f"- Issue {repo}#{issue_number} is not (yet) on Project {OWNER}#{NUMBER} -- skipped "
+                      f"(intake may not have run yet; the hourly sweep will pick it up once it has).",
+                  ])
+                  return
+
+              current = next(
+                  (value.get("name") for value in project_item["fieldValues"]["nodes"]
+                   if value.get("field", {}).get("id") == status["id"]), None,
+              )
+              linked_prs = (issue_node.get("closedByPullRequestsReferences") or {}).get("nodes") or []
+              linked_branches = (issue_node.get("linkedBranches") or {}).get("nodes") or []
+              issue = {
+                  "url": issue_node["url"],
+                  "state": issue_node["state"],
+                  "title": issue_node.get("title"),
+                  "repository": issue_node["repository"],
+                  "linked_prs": linked_prs,
+                  "has_active_linked_branch": any(node.get("ref") for node in linked_branches),
+              }
+
+              classify_and_set(
+                  {"item_id": project_item["id"], "current_status": current, "issue": issue},
+                  counts,
+              )
+
+              write_summary([
+                  "### Org Project Sync (targeted)",
+                  f"- Issue: {issue['url']}",
+                  f"- Would update: {counts['would_update']}",
+                  f"- Actual updated: {counts['updated']}",
+                  f"- Already correct: {counts['already_correct']}",
+                  f"- Regression suppressed: {counts['regressions_suppressed']}",
+              ])
+
+          DISPATCH_PAYLOAD_RAW = os.environ.get("DISPATCH_PAYLOAD", "")
+
           if WRITE_PROBE:
               write_probe()
+          elif DISPATCH_PAYLOAD_RAW:
+              targeted_sync(json.loads(DISPATCH_PAYLOAD_RAW))
           else:
               reconcile()
           PY

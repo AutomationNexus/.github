@@ -24,8 +24,9 @@ docs-only fix, wontfix) and a manual-only `Blocked` state that sits outside
 the forward flow.
 
 - **Backlog** — not started / open with no classifiable linked PR yet.
-- **In Progress** — actively being worked (set by hand; nothing derives this
-  one automatically from a PR state).
+- **In Progress** — the issue has an active **linked branch** (via `gh issue
+  develop --checkout` or the issue page's "Create a branch" button — a plain
+  `git checkout -b` doesn't count) but no PR yet.
 - **In Review** — the issue has an open PR against `dev` (or `main`, for
   repos with no `dev`).
 - **On Dev** — the issue's PR merged to `dev`, not yet released to `main`.
@@ -38,19 +39,27 @@ the forward flow.
   that isn't a versioned release.
 - **Blocked** — manual only; never set or cleared automatically.
 
-**`In Review → On Dev → Promote Pending → Released`, and closed→`Done`, are
-all automated hourly** (the `org-project-sync.yml` cron sweep), computed from
-each issue's linked pull request(s) — see [`org-project.md`](org-project.md)
-for exactly how a linked PR's state maps to a stage. Status only ever
-**advances**, never regresses, and never touches `Blocked` or an item already
-at `Released`. `Done` can still advance to `Released` later (that's a
-correction, e.g. a PR merges after the issue was already closed as `Done`),
-but nothing downgrades a `Done` back down the ordinary pipeline.
+**`In Progress → In Review → On Dev → Promote Pending → Released`, and
+closed→`Done`, are all automated** — computed from each issue's linked
+branch/pull request(s) and, on a merge/PR/intake event, pushed through
+near-instantly via a `repository_dispatch` fast path (see
+[`org-project.md`](org-project.md)'s "Fast path (repository_dispatch)"
+section); the `org-project-sync.yml` hourly cron sweep remains the safety net
+that catches anything the fast path missed. See
+[`org-project.md`](org-project.md) for exactly how a linked branch/PR's state
+maps to a stage. Status only ever **advances**, never regresses, and never
+touches `Blocked` or an item already at `Released`. `Done` can still advance
+to `Released` later (that's a correction, e.g. a PR merges after the issue
+was already closed as `Done`), but nothing downgrades a `Done` back down the
+ordinary pipeline.
 
 If an issue's Status isn't moving the way you expect, check that its PR is
 actually **linked** to it (a closing keyword like `Fixes #123` in the PR
 body/description, or a manual link in the issue sidebar) — an unlinked PR is
-invisible to the sync no matter how far along it is.
+invisible to the sync no matter how far along it is. Likewise, `In Progress`
+only appears once a **linked branch** exists — a plain `git checkout -b`
+doesn't create one; use `gh issue develop --checkout` or the issue page's
+"Create a branch" button.
 
 ## Automated for you vs. set by hand
 
@@ -59,7 +68,9 @@ invisible to the sync no matter how far along it is.
 - Intake — each repo's `add-to-project.yml` caller adds new **issues** to the
   board on open (PRs are intentionally not added as separate cards).
 - New issue defaults to **Backlog** if it has no Status yet.
-- The Status pipeline transitions above, derived from linked PRs.
+- The Status pipeline transitions above, derived from linked branches/PRs, on
+  a near-instant `repository_dispatch` fast path with the hourly cron as the
+  safety net.
 - **Area/Type** filled from the issue's labels (`bug`→bug,
   `enhancement`→feature, `documentation`→docs, `security`→security,
   `chore`→chore) — only when unset, never overriding a manual value.

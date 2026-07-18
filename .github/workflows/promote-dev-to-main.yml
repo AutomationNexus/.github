@@ -106,6 +106,33 @@ jobs:
         with:
           app-id: ${{ secrets.ci-bot-app-id }}
           private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+          # Narrowed to just this repo (companion hardening, same as
+          # auto-merge.yml). No permission-* input is added, so the default
+          # "all permissions the App has for this repo" behavior is
+          # unchanged -- this only narrows which repo the token reaches.
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Mint .github dispatch token
+        id: github-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ci-bot-app-id }}
+          private-key: ${{ secrets.ci-bot-app-private-key }}
+          owner: ${{ github.repository_owner }}
+          # Separate, narrowly-scoped token reaching ONLY .github, with ONLY
+          # Contents permission -- deliberately isolated from the primary
+          # bot-token above, which does the actual push/merge on this repo.
+          # Used for two things below: (1) checking out
+          # automationnexus/.github's promote-reconcile.py helper (read),
+          # and (2) firing this promote's board fast-path dispatches at
+          # .github's repository_dispatch endpoint, which GitHub gates on
+          # Contents:write (dispatch_project_sync_full_sweep()). Keeping
+          # this isolated from the primary token means a compromise of this
+          # repo's promote flow (e.g. malicious dev-branch content) can
+          # never leverage write access to .github.
+          repositories: .github
+          permission-contents: write
 
       - uses: actions/checkout@v6
         with:
@@ -122,11 +149,17 @@ jobs:
           ref: v1
           path: .promotion-workflow-tools-${{ github.run_id }}
           fetch-depth: 1
-          token: ${{ steps.bot-token.outputs.token }}
+          token: ${{ steps.github-token.outputs.token }}
+          # This checkout only ever reads workflow tooling (never commits
+          # here) and the whole directory is rm -rf'd before this job's own
+          # git add -A -- persisting the .github-scoped token into
+          # .git/config anyway would be an unnecessary residual credential.
+          persist-credentials: false
 
       - name: Promote dev to main via PR (CI-Bot)
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          GITHUB_DISPATCH_TOKEN: ${{ steps.github-token.outputs.token }}
           REPO: ${{ github.repository }}
           EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
           STRIP_DEV_ONLY_PATHS: ${{ inputs.strip-dev-only-paths }}
@@ -152,6 +185,33 @@ jobs:
           elif [ "${BUMP_TYPE}" = "major" ]; then
             PR_TITLE="${PR_TITLE} (Major)"
           fi
+
+          dispatch_project_sync_full_sweep() {
+            # Board fast-path (best-effort, inlined rather than the
+            # dispatch-project-sync composite action -- this file's control
+            # flow is one long retried script, not discrete steps). A
+            # promote PR folds multiple issues together, so a full sweep is
+            # dispatched instead of resolving individual issue numbers.
+            # Uses the separate, narrowly-scoped .github-only token minted
+            # above (GITHUB_DISPATCH_TOKEN) -- deliberately isolated from
+            # the primary bot-token (GH_TOKEN) that does this repo's actual
+            # push/merge, so this dispatch call never runs with more than
+            # Contents:write on .github. Called once the promote PR is
+            # confirmed to exist (Promote Pending) and again right after it
+            # merges (Released). The `if !` guard (not `set -e`) is what
+            # keeps a dispatch failure from aborting this whole script --
+            # the hourly org-project-sync.yml cron remains the real
+            # reconciliation safety net.
+            local promote_owner="${REPO%%/*}"
+            local promote_repo="${REPO#*/}"
+            if ! GH_TOKEN="${GITHUB_DISPATCH_TOKEN}" gh api "repos/${promote_owner}/.github/dispatches" \
+                -f event_type=project-sync \
+                -f "client_payload[owner]=${promote_owner}" \
+                -f "client_payload[repo]=${promote_repo}" \
+                -F "client_payload[full_sweep]=true" >/dev/null 2>&1; then
+              echo "::warning::project-sync dispatch (full sweep) failed for ${REPO} (best-effort fast path; the hourly cron remains the safety net)."
+            fi
+          }
 
           # A reconciliation branch starts from a fresh main snapshot, then merges dev. This
           # handles historical dev/main divergence (not just a main update during this run):
@@ -214,6 +274,7 @@ jobs:
             if [ -z "${pr}" ]; then
               echo "::error::Promotion PR not found after creation."; exit 1
             fi
+            dispatch_project_sync_full_sweep  # Promote Pending
 
             head_sha=$(gh pr view "${pr}" --repo "${REPO}" --json headRefOid --jq '.headRefOid')
             echo "Waiting for CI on promotion PR #${pr} (head ${head_sha})..."
@@ -264,6 +325,7 @@ jobs:
             echo "${merge_out}"
             if [ "${merge_rc}" -eq 0 ]; then
               echo "Merged promotion PR #${pr}."
+              dispatch_project_sync_full_sweep  # Released
               break
             fi
             if echo "${merge_out}" | grep -qi "conflict" && [ -n "${NEEDS_TEMP_BRANCH}" ] && [ "${RETRY}" -lt 3 ]; then
