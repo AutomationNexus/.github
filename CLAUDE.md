@@ -103,6 +103,15 @@ root is not a git repo, so `scripts/sync-workspace.sh` copies this layer into pl
 `--check` reports drift and `--force` backs up before overwrite. Edit `workspace/` here via
 PR to `master`, never the root copies.
 
+`scripts/clean-workspace.sh` prunes merged-work leftovers from the same workspace-root
+clones — agent worktrees under `<repo>/.claude/worktrees/` (auto-removed only when
+unchanged, so any that did real work leak), merged-and-remote-deleted local branches, and
+checkouts parked on an already-merged branch. It removes only provably-merged state (tip is
+an ancestor of `origin/dev`/`main`/`master`, or `gh` reports a MERGED PR for the branch);
+anything with uncommitted or unmerged-no-PR work is kept and reported. `--check` (default)
+is a dry run; `--prune` acts. Stale local state is a collision-protocol hazard — another
+session can misread it as active work — so run this after multi-agent sweeps.
+
 Two separate propagation scripts serve different protection models:
 
 - `scripts/sync-templates.sh` — bundle → 5 `template-*` repos. Direct-push exception;
