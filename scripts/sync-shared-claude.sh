@@ -36,6 +36,7 @@ repo_prefix() {
     ModelDeck)        echo "md" ;;
     Uploadarr)        echo "ua" ;;
     HomeAssistant)    echo "ha" ;;
+    MikroTik_Systems) echo "mt" ;;
     *) echo "unknown/unsupported target repo: $1" >&2; exit 1 ;;
   esac
 }
@@ -85,7 +86,7 @@ merge_file() {
 }
 
 if [ "$#" -eq 0 ]; then
-  TARGETS=(CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant)
+  TARGETS=(CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant MikroTik_Systems)
 else
   TARGETS=("$@")
 fi
