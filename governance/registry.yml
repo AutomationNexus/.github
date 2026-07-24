@@ -431,6 +431,27 @@ repositories:
       until that lands and a promote runs, org-project-sync still reports HA merges
       as "On Dev" (no vX.Y.Z tag exists yet to compare against).
 
+  - repo: MikroTik_Systems
+    class: config-only
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main (bump-type + version-file=VERSION) -> PR -> main -> release-tag.yml (tag + GitHub Release; version sourced from VERSION file, no pyproject.toml)"
+    team_policy: full-core
+    domain_agents: [network-doctor, wireguard-engineer, hotspot-radius-engineer, firewall-nat-engineer, backup-operator, drift-auditor, network-inspector, release-operator]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: active
+    notes: >
+      Private live-router digital twin (CognitiveSystems MikroTik fleet: CHR hub +
+      Essen/HB-1/HB-2 spokes; WireGuard, hotspot, RADIUS/User-Manager) modeled 1:1 on
+      HomeAssistant. Live routers are canonical; the human local pull/review/PR path is
+      the sole route from live-router data into Git; guarded-apply.ps1 is local-only and
+      human-confirmed and is the only writer; a merge/promote/tag never writes to a
+      router and never pulls live data. CI is report-only: two repo-specific read-only
+      monitors (backup-health.yml, drift-check.yml) run on ARC beside the shared workflow
+      callers -- schedule/dispatch only, issues only, no commit/branch/PR/backup/config/
+      router write, and no age key (live SSH is opt-in via a dedicated read-only key).
+
   - repo: ARCRunner
     class: minimal
     default_branch: main
