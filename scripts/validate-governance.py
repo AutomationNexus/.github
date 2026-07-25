@@ -712,7 +712,7 @@ def check_live_projects(report: Report) -> None:
     query = 'query=query { organization(login: "AutomationNexus") { projectsV2(first: 20) { nodes { title } } } }'
     try:
         result = subprocess.run(
-            ["gh", "api", "graphql", "-f", query], text=True, capture_output=True, timeout=30,
+            ["gh", "api", "graphql", "-f", query], check=False, text=True, capture_output=True, timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         report.warn("live-projects", f"could not query org Projects v2 ({exc}) -- permission-limited")
