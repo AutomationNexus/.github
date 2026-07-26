@@ -341,9 +341,19 @@ jobs:
         with:
           fetch-depth: 0
       - run: |
-          if [ ! -f .github/dev-only-paths ]; then echo "No dev-only-paths — OK."; exit 0; fi
-          if git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths | grep -q .; then
-            git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths
+          base_manifest="$RUNNER_TEMP/dev-only-paths-main"
+          if git cat-file -e origin/main:.github/dev-only-paths 2>/dev/null; then
+            git show origin/main:.github/dev-only-paths > "$base_manifest"
+            if [ ! -f .github/dev-only-paths ]; then
+              echo "::error::.github/dev-only-paths must not be deleted from a main-target PR"; exit 1
+            fi
+          elif [ ! -f .github/dev-only-paths ]; then
+            echo "No dev-only-paths — OK."; exit 0
+          else
+            cp .github/dev-only-paths "$base_manifest"
+          fi
+          if git diff --name-only --diff-filter=AM origin/main...HEAD | grep -iE -f "$base_manifest" | grep -q .; then
+            git diff --name-only --diff-filter=AM origin/main...HEAD | grep -iE -f "$base_manifest"
             echo "::error::PR to main contains paths blocked by .github/dev-only-paths"; exit 1
           fi
           echo "OK — no disallowed files."
@@ -426,6 +436,8 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: No credential files tracked
         run: |
           bad=$(git ls-files | grep -E '^\.env$|\.pem$|(^|/)id_rsa' || true)
@@ -436,8 +448,18 @@ jobs:
       - name: Main must be clean of dev-only tooling
         if: github.base_ref == 'main'
         run: |
-          if [ ! -f .github/dev-only-paths ]; then exit 0; fi
-          bad=$(git ls-files | grep -iE -f .github/dev-only-paths || true)
+          base_manifest="$RUNNER_TEMP/dev-only-paths-main"
+          if git cat-file -e "origin/${{ github.base_ref }}:.github/dev-only-paths" 2>/dev/null; then
+            git show "origin/${{ github.base_ref }}:.github/dev-only-paths" > "$base_manifest"
+            if [ ! -f .github/dev-only-paths ]; then
+              echo "::error::.github/dev-only-paths must not be deleted from a main-target PR"; exit 1
+            fi
+          elif [ ! -f .github/dev-only-paths ]; then
+            exit 0
+          else
+            cp .github/dev-only-paths "$base_manifest"
+          fi
+          bad=$(git ls-files | grep -iE -f "$base_manifest" || true)
           if [ -n "$bad" ]; then
             echo "::error::Dev-only tooling files on main: $bad"; exit 1
           fi
