@@ -23,6 +23,14 @@ on:
         type: boolean
         required: false
         default: false
+      # Same input, same default, same JSON-array shape as ci.yml and nightly.yml.
+      # The default keeps every existing caller on GitHub-hosted runners exactly as
+      # before; a caller with self-hosted capacity opts in by passing its own labels.
+      runner-labels:
+        description: "JSON array of runner labels"
+        required: false
+        default: '["ubuntu-latest"]'
+        type: string
     secrets:
       ci-bot-app-id:
         required: true
@@ -36,7 +44,7 @@ permissions:
 jobs:
   enable:
     name: Auto-merge after checks (CI-Bot)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 60
     if: >-
       !github.event.pull_request.draft && (
@@ -201,7 +209,7 @@ jobs:
 
   dispatch-in-review:
     name: Dispatch In Review fast-path sync
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 5
     # Only a genuinely new open-against-dev PR should trigger this -- not
     # `synchronize` (an issue already In Review stays In Review; no rank

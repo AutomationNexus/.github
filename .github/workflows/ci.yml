@@ -365,7 +365,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   auto-revert:
     name: Auto-revert Unauthorised Push
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
     # Only run on direct pushes to protected branches when auto-revert is enabled
     if: >-
       inputs.auto-revert == true &&
