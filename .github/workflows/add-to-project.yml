@@ -23,6 +23,14 @@ on:
         required: false
         default: "https://github.com/orgs/AutomationNexus/projects/1"
         type: string
+      # Same input, same default, same JSON-array shape as ci.yml and nightly.yml.
+      # The default keeps every existing caller on GitHub-hosted runners exactly as
+      # before; a caller with self-hosted capacity opts in by passing its own labels.
+      runner-labels:
+        description: "JSON array of runner labels"
+        required: false
+        default: '["ubuntu-latest"]'
+        type: string
     secrets:
       ci-bot-app-id:
         required: true
@@ -39,7 +47,7 @@ concurrency:
 jobs:
   add:
     name: Add item to org Project
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
     # Issue-centric board: only an `issues` trigger should ever add a card.
     # A pull_request trigger (still sent by existing consumer wrappers, kept
     # for back-compat) is intentionally a no-op here -- github.event_name

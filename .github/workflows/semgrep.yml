@@ -2,18 +2,38 @@ name: Semgrep
 
 on:
   workflow_call:
+    inputs:
+      # Same input, same default, same JSON-array shape as ci.yml and nightly.yml.
+      # The default keeps every existing caller on GitHub-hosted runners exactly as
+      # before; a caller with self-hosted capacity opts in by passing its own labels.
+      runner-labels:
+        description: "JSON array of runner labels"
+        required: false
+        default: '["ubuntu-latest"]'
+        type: string
 permissions:
   contents: read
 
 jobs:
   semgrep:
     name: Semgrep
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: 15
-    container:
-      image: returntocorp/semgrep
     steps:
       - uses: actions/checkout@v6
+      # Installed, rather than run as a `container:` job. A container job needs a
+      # Docker daemon on the runner: GitHub-hosted runners have one, the org's ARC
+      # pods do not (ARCRunner/Dockerfile.runner installs no Docker, and no scale
+      # set runs in dind or Kubernetes container mode). Leaving the container in
+      # place would have made `runner-labels` above a trap -- it would select an
+      # ARC runner that then cannot honour the job at all. A venv rather than a
+      # bare `pip install` because both Ubuntu 24.04 bases mark the system Python
+      # externally-managed (PEP 668).
+      - name: Install semgrep
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep-venv"
+          "$RUNNER_TEMP/semgrep-venv/bin/pip" install --quiet --upgrade pip semgrep
+          echo "$RUNNER_TEMP/semgrep-venv/bin" >> "$GITHUB_PATH"
       - run: |
           semgrep scan \
             --config=p/security-audit \

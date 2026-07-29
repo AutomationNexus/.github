@@ -17,4 +17,10 @@ concurrency:
 
 jobs:
   semgrep:
-    uses: automationnexus/.github/.github/workflows/semgrep.yml@v1
+    # Relative ref, so this runs the semgrep.yml in THIS commit rather than the
+    # one behind @v1. The meta-repo's own CI is the last gate before @v1 moves,
+    # and @v1 is what all 11 consumer repos resolve -- so a self-check pinned to
+    # @v1 validates the code already in production and says nothing about the
+    # change under review. A broken shared workflow would then be discovered
+    # only after the tag moved, i.e. after every repo was already exposed.
+    uses: ./.github/workflows/semgrep.yml
