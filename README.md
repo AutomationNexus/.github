@@ -12,11 +12,18 @@ Org-wide GitHub Actions reusable workflows, repo templates, and shared config fo
 | `nightly.yml` | Nightly Docker build from dev | `image-name`, `platforms`, `force_run`, `has-frontend`, `coverage-threshold`, `pip-install-cmd`, `test-cmd` |
 | `release-docker.yml` | Tag (from pyproject) → build/push GHCR → Release → Trivy | `image-name`, `platforms`, `tag_name`, `has-frontend`, `has-validation` |
 | `release-pypi.yml` | Tag (from pyproject) → build wheel → PyPI upload (token) → Release | `has-frontend`, `tag_name` · secret: `pypi-api-token` |
-| `semgrep.yml` | SAST scan | `runner-labels`. Semgrep is pip-installed into a venv rather than run as a `container:` job, so the workflow runs on a self-hosted runner with no Docker daemon (the org's ARC pods) as well as on GitHub-hosted |
+| `semgrep.yml` | SAST scan | `runner-labels`. Semgrep is pip-installed into a venv (PEP 668) rather than run as a `container:` job — a job-level container buys nothing for a single pip package |
 | `docs.yml` | MkDocs Material → GitHub Pages | none |
 | `add-to-project.yml` | Adds the triggering issue/PR to the org delivery Project (event-driven intake), then fires a best-effort `repository_dispatch` fast-path sync so the new issue's Status doesn't wait for `org-project-sync.yml`'s hourly cron | `project-url` (default `https://github.com/orgs/AutomationNexus/projects/1`), `runner-labels` · secrets: `ci-bot-app-id`, `ci-bot-app-private-key` |
 
 Tag: `@v1` (stable) tracks the current release; pin to a commit SHA for stricter security.
+
+**Runners (org-wide):** every `runner-labels` input defaults to the self-hosted ARC pool
+(`["linux","x64","k3s","ubuntu-latest"]`), and there are no GitHub-hosted runners left in
+this org — public and private repos alike run on ARC. Label matching requires *all*
+labels, so a bare `runs-on: ubuntu-latest` silently resolves to GitHub's hosted pool
+instead; always use the JSON-array form. `release-docker.yml` keeps a separate
+`publish-runner` input for the image build/push job.
 
 ## Composite actions (`.github/actions/`)
 

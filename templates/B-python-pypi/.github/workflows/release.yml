@@ -22,7 +22,7 @@ jobs:
   pypi-release:
     uses: automationnexus/.github/.github/workflows/release-pypi.yml@v1
     with:
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       has-frontend: false
       tag_name: ${{ inputs.tag_name || '' }}
     secrets:

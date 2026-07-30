@@ -6,10 +6,10 @@
 |------|----------|--------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
 | CognitiveSystems | main-dev | `[linux,x64,k3s,ubuntu-latest]` | ✓ | ✓ | - | ✓ | +Add | - | - | pypi |
 | HomeAssistant | main-dev | `[linux,x64,k3s,ubuntu-latest]` | - | - | - | - | - | - | - | none (addon-validate) |
-| MediaRefinery | main-dev | `["ubuntu-latest"]` | ✓ | ✓ | - | ✓ | ✓ | ✓ | ✓ | docker |
-| ModelDeck | main-dev | `["ubuntu-latest"]` | - | - | ✓(mosquitto) | ✓ | ✓ | ✓(bespoke, +addon) | ✓ | docker + in-repo HA add-on (modeldeck/, modeldeck-nightly/) |
+| MediaRefinery | main-dev | `[linux,x64,k3s,ubuntu-latest]` | ✓ | ✓ | - | ✓ | ✓ | ✓ | ✓ | docker |
+| ModelDeck | main-dev | `[linux,x64,k3s,ubuntu-latest]` | - | - | ✓(mosquitto) | ✓ | ✓ | ✓(bespoke, +addon) | ✓ | docker + in-repo HA add-on (modeldeck/, modeldeck-nightly/) |
 | Uploadarr | main-dev | `[linux,x64,k3s,ubuntu-latest]` | ✓ | ✓ | - | ✓ | ✓ | ✓ | ✓ | docker |
-| ARCRunner | main-only | `["ubuntu-latest"]` | - | - | - | - | - | - | - | none (img-build) |
+| ARCRunner | main-only | `[linux,x64,k3s,ubuntu-latest]` | - | - | - | - | - | - | - | none (img-build) |
 
 ## Reusable Workflows (`automationnexus/.github`)
 

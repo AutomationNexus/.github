@@ -24,7 +24,7 @@ jobs:
   nightly:
     uses: automationnexus/.github/.github/workflows/nightly.yml@v1
     with:
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       # REPLACE_ME: must be lowercase -- Docker/GHCR rejects uppercase repository names.
       image-name: automationnexus/replace-me
       platforms: linux/amd64

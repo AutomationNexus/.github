@@ -28,7 +28,7 @@ jobs:
     name: Promote dev to main
     uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
     with:
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       strip-dev-only-paths: true
       # Delete exclude-paths if this repo has no nightly-channel add-on folder. main is the
       # sole owner of these 2 files (the nightly-publish pathway writes them directly); a

@@ -36,7 +36,7 @@ env:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ["linux", "x64", "k3s", "ubuntu-latest"]
     timeout-minutes: 10
     steps:
       - name: Mint CI-Bot App token

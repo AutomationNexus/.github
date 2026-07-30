@@ -41,7 +41,7 @@ on:
       runner-labels:
         description: "JSON array of runner labels"
         required: false
-        default: '["ubuntu-latest"]'
+        default: '["linux","x64","k3s","ubuntu-latest"]'
         type: string
       python-version:
         required: false
