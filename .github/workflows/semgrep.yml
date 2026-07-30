@@ -4,12 +4,13 @@ on:
   workflow_call:
     inputs:
       # Same input, same default, same JSON-array shape as ci.yml and nightly.yml.
-      # The default keeps every existing caller on GitHub-hosted runners exactly as
-      # before; a caller with self-hosted capacity opts in by passing its own labels.
+      # The default is the org's ARC pool: every job runs self-hosted, in public and
+      # private repos alike. A bare `ubuntu-latest` would resolve to GitHub's hosted
+      # pool -- only the full JSON array matches the ARC label set.
       runner-labels:
         description: "JSON array of runner labels"
         required: false
-        default: '["ubuntu-latest"]'
+        default: '["linux","x64","k3s","ubuntu-latest"]'
         type: string
 permissions:
   contents: read
@@ -21,14 +22,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-      # Installed, rather than run as a `container:` job. A container job needs a
-      # Docker daemon on the runner: GitHub-hosted runners have one, the org's ARC
-      # pods do not (ARCRunner/Dockerfile.runner installs no Docker, and no scale
-      # set runs in dind or Kubernetes container mode). Leaving the container in
-      # place would have made `runner-labels` above a trap -- it would select an
-      # ARC runner that then cannot honour the job at all. A venv rather than a
-      # bare `pip install` because both Ubuntu 24.04 bases mark the system Python
-      # externally-managed (PEP 668).
+      # Installed, rather than run as a `container:` job, purely to keep the job
+      # self-contained and fast -- semgrep is one pip package, so a job-level
+      # container buys nothing here.
+      #
+      # An earlier version of this comment claimed the ARC pods have no Docker
+      # daemon. That was wrong: ci.yml's ha-validate job runs `docker run` on ARC
+      # today (verified on pod arc-sh-gh-runner-7phc8-runner-z5dtl), so Docker is
+      # available. Do not reintroduce that assumption.
+      #
+      # A venv rather than a bare `pip install` because both Ubuntu 24.04 bases
+      # mark the system Python externally-managed (PEP 668).
       - name: Install semgrep
         run: |
           python3 -m venv "$RUNNER_TEMP/semgrep-venv"

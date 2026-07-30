@@ -26,7 +26,7 @@ jobs:
       main-source-require-dev: false
       # HA config repos are typically private on Free plan -> rely on guards.
       auto-revert: true
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       python-version: "3.12"
       has-ha-validate: true
       has-yaml-lint: true

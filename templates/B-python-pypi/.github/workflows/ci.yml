@@ -25,7 +25,7 @@ jobs:
       # should flip this back to true (or omit it) once bootstrapped.
       main-source-require-dev: false
       auto-revert: false
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       python-version: "3.11"
       has-frontend: false
       has-security: true

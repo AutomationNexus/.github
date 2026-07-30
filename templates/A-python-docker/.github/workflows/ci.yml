@@ -26,7 +26,7 @@ jobs:
       main-source-require-dev: false
       # Private repo? set true and rely on guards (no rulesets on Free plan).
       auto-revert: false
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       python-version: "3.11"
       node-version: "24"
       has-frontend: false

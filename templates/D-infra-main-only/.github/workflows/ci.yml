@@ -17,7 +17,7 @@ jobs:
     uses: automationnexus/.github/.github/workflows/ci.yml@v1
     with:
       branch-model: main-only
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       has-security: false
       # Lets the sanctioned scripts/sync-templates.sh direct-push (this repo has no dev
       # branch) pass Guard Main Direct Push instead of showing a permanent red X.

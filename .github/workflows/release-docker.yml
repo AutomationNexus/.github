@@ -5,11 +5,11 @@ on:
     inputs:
       runner-labels:
         required: false
-        default: '["ubuntu-latest"]'
+        default: '["linux","x64","k3s","ubuntu-latest"]'
         type: string
       publish-runner:
         required: false
-        default: '["ubuntu-latest"]'
+        default: '["linux","x64","k3s","ubuntu-latest"]'
         type: string
       image-name:
         required: true

@@ -5,11 +5,11 @@ replace the `REPLACE_ME*` placeholders, then add the required secrets.
 
 | Group | Use for | Branch model | Release | Runners |
 |-------|---------|--------------|---------|---------|
-| **A — python-docker** | Python service shipping a Docker image | main-dev | `release-docker` + `nightly` | `["ubuntu-latest"]` (public) |
-| **B — python-pypi** | Python package published to PyPI | main-dev | `release-pypi` | `["ubuntu-latest"]` |
-| **C — docker-ha-addon** | Docker app + in-repo HA add-on folder(s) (proven pattern: ModelDeck) | main-dev | `release-docker` + `nightly` (in-repo pointer bumps, no separate add-on release) | `["ubuntu-latest"]` |
-| **D — infra-main-only** | Image/infra builder, single branch | main-only | custom build | `["ubuntu-latest"]` |
-| **E — ha-config** | Home Assistant config repo | main-dev | none | self-hosted/ubuntu |
+| **A — python-docker** | Python service shipping a Docker image | main-dev | `release-docker` + `nightly` | `["linux","x64","k3s","ubuntu-latest"]` |
+| **B — python-pypi** | Python package published to PyPI | main-dev | `release-pypi` | `["linux","x64","k3s","ubuntu-latest"]` |
+| **C — docker-ha-addon** | Docker app + in-repo HA add-on folder(s) (proven pattern: ModelDeck) | main-dev | `release-docker` + `nightly` (in-repo pointer bumps, no separate add-on release) | `["linux","x64","k3s","ubuntu-latest"]` |
+| **D — infra-main-only** | Image/infra builder, single branch | main-only | custom build | `["linux","x64","k3s","ubuntu-latest"]` |
+| **E — ha-config** | Home Assistant config repo | main-dev | none | `["linux","x64","k3s","ubuntu-latest"]` |
 
 ## Secrets every repo needs
 - `CI_BOT_APP_ID`, `CI_BOT_APP_PRIVATE_KEY` — the AutomationNexus CI Bot GitHub App (install the App on the repo first).
