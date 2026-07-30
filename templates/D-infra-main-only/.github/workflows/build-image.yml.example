@@ -22,7 +22,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # The org's ARC pool. Label matching requires ALL labels, so a bare
+    # `ubuntu-latest` resolves to GitHub's hosted pool instead -- there are no
+    # hosted runners left in this org, public repos included.
+    runs-on: ["linux", "x64", "k3s", "ubuntu-latest"]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
