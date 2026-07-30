@@ -155,7 +155,16 @@ on:
       e2e-playwright-install-cmd:
         description: "Browser install command for the e2e job"
         required: false
-        default: 'python -m playwright install --with-deps chromium'
+        # Deliberately NOT `--with-deps`. That flag shells out to sudo to apt-get the
+        # browser's OS libraries; it worked on GitHub-hosted runners, but the ARC image
+        # narrows the runner user's sudo to apt-get/apt/dpkg only, so it dies with
+        # "sudo: a terminal is required to read the password". Since every job in this
+        # org now runs on ARC, `--with-deps` cannot succeed for any caller.
+        #
+        # It is also unnecessary: the ARC image pre-installs those libraries and bakes a
+        # version-matched Chromium into PLAYWRIGHT_BROWSERS_PATH (see ARCRunner's
+        # Dockerfile.runner), so a plain install finds it instead of downloading.
+        default: 'python -m playwright install chromium'
         type: string
     secrets:
       ci-bot-app-id:
