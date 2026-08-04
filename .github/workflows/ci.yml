@@ -646,8 +646,16 @@ jobs:
       - run: pip install bandit pip-audit
       - run: bandit -r ${{ inputs.security-paths }} -ll -f json -o bandit-report.json
       - run: pip-audit --format json --output pip-audit.json || true
+      # Diagnostics, not the verdict: bandit above is what fails this job. Nothing
+      # downstream consumes this artifact, so a blob-storage blip must not turn a passing
+      # security gate red — it uploads on `always()` precisely because the interesting
+      # case is the failed run, and losing the upload is strictly less bad than losing
+      # the result. Deliberately NOT applied to the artifacts a later job downloads
+      # (spa-dist-*), where a silent upload failure would surface as a confusing
+      # downstream error instead.
       - uses: actions/upload-artifact@v7
         if: always()
+        continue-on-error: true
         with:
           name: security-reports-${{ github.run_id }}
           path: "*.json"
