@@ -133,6 +133,43 @@ class PromoteReconcileTests(unittest.TestCase):
         self.reconcile(bump="none", excludes="new-owned.txt")
         self.assertEqual((self.repo / "new-owned.txt").read_text(), "dev introduces it\n")
 
+    def test_stdout_carries_only_the_version_when_git_reports_a_conflict(self) -> None:
+        """The workflow reads stdout with NEW_VERSION=$(...), so nothing else may land there.
+
+        Shape taken from the real failure: a promote where main no longer has a dev-only
+        file (an earlier promote stripped it) and dev has since modified it. -X theirs does
+        not resolve modify/delete, so git prints "CONFLICT (modify/delete): ..." -- which
+        used to be inherited onto this script's stdout and ended up inside the promote
+        commit message ("bump version to CONFLICT (modify/delete): ... 0.0.8").
+        """
+        # Shared ancestor carries the dev-only file, so main deleting it and dev editing it
+        # is a genuine modify/delete -- the one conflict class -X theirs cannot resolve.
+        git(self.repo, "checkout", "main")
+        self.write(".github/dev-only-paths", "^CLAUDE\\.md$\n^\\.claude/\n")
+        self.write(".claude/agents/architect.md", "shared ancestor\n")
+        self.commit("base carries the dev-only agent file")
+        git(self.repo, "branch", "-f", "dev", "main")
+
+        self.dev_change(
+            {
+                ".claude/agents/architect.md": "dev edits the agent\n",
+                "feature.txt": "keep me\n",
+            }
+        )
+        git(self.repo, "checkout", "main")
+        git(self.repo, "rm", "-q", ".claude/agents/architect.md")
+        self.commit("an earlier promote stripped it from main")
+
+        result = self.reconcile(bump="patch", strip=True)
+
+        # Exact equality, not `in`: a prefix assertion would still pass with git's
+        # conflict text glued in front of the version.
+        self.assertEqual(result.stdout, "0.0.8\n")
+        # Rerouted, not silenced -- the Actions log must still show what git said.
+        self.assertIn("CONFLICT", result.stderr)
+        self.assertFalse((self.repo / ".claude/agents/architect.md").exists())
+        self.assertEqual((self.repo / "feature.txt").read_text(), "keep me\n")
+
     def test_strip_dev_only_paths_and_resolve_their_conflicts(self) -> None:
         self.dev_change(
             {
