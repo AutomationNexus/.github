@@ -21,3 +21,9 @@ jobs:
       lint-paths: 'scripts'
       has-yaml-lint: true
       has-shellcheck: true
+      # Without both of these the shared `test` job skips itself, which is how tests/
+      # (promote-reconcile, the main-file guard, the governance scenarios) sat unrun in
+      # this repo's own CI while every consumer repo gated on the logic they cover.
+      # Only pytest is installed: the suite is stdlib + git fixtures, no package to build.
+      pip-install-cmd: 'python -m pip install --quiet pytest'
+      test-cmd: 'python -m pytest tests -q'

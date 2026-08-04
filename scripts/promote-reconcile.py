@@ -21,12 +21,31 @@ class ReconcileError(RuntimeError):
 
 
 def run(*args: str, check: bool = True, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        check=check,
-        text=True,
-        capture_output=capture_output,
-    )
+    """Run a child process, keeping this script's own stdout clean.
+
+    This script's stdout is a protocol channel, not a log: promote-dev-to-main.yml reads
+    it whole with ``NEW_VERSION=$(python3 promote-reconcile.py ...)`` and puts the result
+    in the promote commit message. Git writes some of its own diagnostics to stdout --
+    notably ``CONFLICT (modify/delete): ...`` -- so an inherited stdout leaked straight
+    into that message (a real promote shipped ``bump version to CONFLICT (modify/delete):
+    .claude/agents/architect.md ... 0.1.1``). The version math was never affected; the
+    commit message was.
+
+    So the child never touches this process's stdout. Its output is captured and, unless
+    the caller asked to parse it, forwarded to stderr -- which the Actions log renders
+    identically, so nothing becomes invisible. ``capture_output`` now means only "the
+    caller parses this", not "hide it".
+    """
+    result = subprocess.run(args, check=False, text=True, capture_output=True)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if result.stdout and not capture_output:
+        sys.stderr.write(result.stdout)
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(
+            result.returncode, args, result.stdout, result.stderr
+        )
+    return result
 
 
 def unresolved_paths() -> list[str]:
