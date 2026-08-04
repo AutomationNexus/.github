@@ -51,8 +51,12 @@ jobs:
           ERRORS=$(jq '[.results[]? | select(.extra.severity=="ERROR")] | length' semgrep-report.json 2>/dev/null || echo 0)
           WARNINGS=$(jq '[.results[]? | select(.extra.severity=="WARNING")] | length' semgrep-report.json 2>/dev/null || echo 0)
           echo "Semgrep — ERROR: $ERRORS  WARNING: $WARNINGS"
+      # Same reasoning as ci.yml's security-reports upload: the scan itself already
+      # `|| true`s, so this report is pure diagnostics and an upload blip must not be the
+      # only thing that reddens the check.
       - uses: actions/upload-artifact@v7
         if: always()
+        continue-on-error: true
         with:
           name: semgrep-report-${{ github.run_id }}
           path: semgrep-report.json
