@@ -38,6 +38,14 @@ on:
         required: false
         default: 90
         type: number
+      ruff-version:
+        description: >-
+          Exact ruff version installed for the nightly lint job (empty → latest release).
+          Keep in lockstep with ci.yml's input of the same name, so nightly and PR lint
+          never disagree about which rules are enforced.
+        required: false
+        default: "0.16.2"
+        type: string
       pip-install-cmd:
         required: false
         default: 'pip install -e ".[dev,service]" -q'
@@ -112,7 +120,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
-      - run: pip install ruff && ruff check src tests tools
+      - run: |
+          pkgs="ruff"
+          [ -z "${{ inputs.ruff-version }}" ] || pkgs="ruff==${{ inputs.ruff-version }}"
+          pip install "$pkgs"
+          ruff --version
+          ruff check src tests tools
 
   frontend:
     name: Frontend (nightly)

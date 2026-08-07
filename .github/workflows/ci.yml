@@ -105,6 +105,15 @@ on:
         required: false
         default: ""
         type: string
+      ruff-version:
+        description: >-
+          Exact ruff version installed for the lint job (empty → latest release).
+          Pinned by default: ruff's *default* rule set grows between releases, so an
+          unpinned install lets a ruff release turn a consumer red with no commit to
+          that consumer. Bump this input deliberately, org-wide, in its own PR.
+        required: false
+        default: "0.16.2"
+        type: string
       test-cmd:
         description: "Full pytest command (empty → test job skipped)"
         required: false
@@ -486,9 +495,11 @@ jobs:
           python-version: ${{ inputs.python-version }}
       - run: |
           pkgs="ruff"
+          [ -z "${{ inputs.ruff-version }}" ] || pkgs="ruff==${{ inputs.ruff-version }}"
           ${{ inputs.has-yaml-lint }} && pkgs="$pkgs yamllint"
           ${{ inputs.has-shellcheck }} && pkgs="$pkgs shellcheck-py"
           pip install $pkgs
+          ruff --version
       - if: inputs.lint-paths != ''
         run: ruff check ${{ inputs.lint-paths }}
       - if: inputs.has-yaml-lint
