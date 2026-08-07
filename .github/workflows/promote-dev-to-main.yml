@@ -63,7 +63,14 @@ jobs:
   promote:
     name: Promote dev to main
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
-    timeout-minutes: 30
+    # Must exceed the promotion-PR CI wait below (120 attempts x 30s = 60 min)
+    # plus setup/merge overhead, or the job is killed before the loop can report
+    # its own timeout. At 30 this cap was half a single wait cycle, so the
+    # "Timed out waiting for promotion PR CI" error was unreachable: a slow CI
+    # run silently cancelled the job and stranded a green promotion PR that
+    # nothing else merges (auto-merge.yml deliberately skips sync/publish-main-*
+    # heads). Keep this above the loop budget if either number changes.
+    timeout-minutes: 90
     steps:
       - name: Require green dev CI
         uses: actions/github-script@v8
@@ -217,6 +224,12 @@ jobs:
           # handles historical dev/main divergence (not just a main update during this run):
           # the resulting PR already contains main as an ancestor. If main moves while the PR
           # is being validated or merged, rebuild the whole branch from fresh refs and retry.
+          #
+          # Known limit: the CI wait below is nested inside this loop, so its 60-minute
+          # budget is per-attempt, not total. Three conflict retries against a slow CI can
+          # still exceed the job's 90-minute cap and cancel the job. That path needs main to
+          # move twice mid-promote, so it is left as a documented edge rather than a
+          # wall-clock deadline refactor; revisit if it is ever observed in practice.
           for RETRY in 1 2 3; do
             HEAD_BRANCH="dev"
 
