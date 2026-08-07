@@ -25,6 +25,24 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Always an absolute `select`, never `extend-select`. `extend-select` is relative to ruff's
+# *default* rule set, and that set grows between releases -- so a new ruff can turn this repo
+# red with no commit to it (ruff 0.16 promoted RUF/PIE/EXE and cost one org repo 2315 errors
+# on an unchanged tree). The shared ci.yml also pins the ruff version via its `ruff-version`
+# input; the pin stops the set drifting, this `select` stops a deliberate version bump from
+# becoming a cliff. Adopting a new rule family is a separate, intentional change.
+select = ["E", "F", "W", "I", "B", "UP", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
 [tool.coverage.run]
 source = ["src"]
 
