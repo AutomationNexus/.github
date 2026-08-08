@@ -15,8 +15,8 @@ Before reporting, cross-check every finding against `automationnexus/.github`'s
   it first and fold its output in — don't re-derive checks it already covers
   (escalation-chain validity, mutation-class-vs-tool-grant mismatches, repo-core team
   composition, live default-branch drift).
-- A gap that matches a registered `exceptions:` entry (e.g. ARCRunner's minimal team,
-  a template repo's stub team) is a **known exception**, not a fresh finding — cite the
+- A gap that matches a registered `exceptions:` entry (e.g. a template repo's
+  documented team policy) is a **known exception**, not a fresh finding — cite the
   registry entry instead of re-flagging it as new.
 - A gap with no matching registry entry is a **real finding** — report it, and note
   that it should also land in the registry (as a fix or a documented exception) so a

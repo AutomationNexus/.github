@@ -12,5 +12,5 @@ It must: verify the target repo's `dev` CI is green; agree the bump-type with th
 then monitor promote run → promote PR → main CI → release tag, reporting each gate.
 
 Scope guard: only CognitiveSystems / MediaRefinery / ModelDeck / Uploadarr are
-versioned. HomeAssistant promotes without a version bump. ARCRunner and the `template-*`
-repos have no promote workflow — refuse with an explanation.
+versioned. HomeAssistant promotes without a version bump. The `template-*` repositories
+have no promote workflow — refuse with an explanation.

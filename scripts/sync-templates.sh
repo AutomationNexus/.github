@@ -108,8 +108,8 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
         [ -f "${SRC}/${rel}" ] && known=1
         # settings.json is sourced from _shared's settings.json.template (renamed).
         [ "$rel" = ".claude/settings.json" ] && known=1
-        # Shared core agents/commands apply to every group except D (mirrors the
-        # ARCRunner minimal-team exception -- see workspace/CLAUDE.md).
+        # Shared core agents/commands apply to every group except D, which has
+        # its own intentional minimal-team policy.
         if [ "$GROUP" != "D" ] && [ -f "${SHARED}/${rel}" ]; then known=1; fi
         if [ -z "$known" ]; then
           echo "    ORPHAN: ${rel} (in ${REPO_NAME} but in neither _shared nor ${DIR_NAME})"
@@ -135,9 +135,8 @@ for GROUP in "${TARGET_GROUPS[@]}"; do
   # real CLAUDE.md + .claude/agents/commands are copied below in the group overlay step
   # (CLAUDE.md.template in _shared/ is reference-only, not copied as a live file).
   copy_file "${SHARED}/.claude/settings.json.template" "${CLONE_DIR}/.claude/settings.json"
-  # Shared-core Claude team (agents + commands) for full-team groups. Group D mirrors
-  # the ARCRunner minimal-team exception (qa-gatekeeper only) and deliberately does NOT
-  # get the shared core -- see workspace/CLAUDE.md "Repo-tier standard".
+  # Shared-core Claude team (agents + commands) for full-team groups. Group D has an
+  # intentional qa-gatekeeper-only policy and deliberately does NOT get the shared core.
   if [ "$GROUP" != "D" ]; then
     copy_dir "${SHARED}/.claude/agents" "${CLONE_DIR}/.claude/agents"
     copy_dir "${SHARED}/.claude/commands" "${CLONE_DIR}/.claude/commands"

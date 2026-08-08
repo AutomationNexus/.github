@@ -32,8 +32,7 @@ convenience summary; the registry is authoritative if they ever disagree.
   `release.yml` that tags `vX.Y.Z`. These 4 are the full auto-versioning
   scope (see below). `HomeAssistant` also has `dev`/`main` and a promote
   workflow but no `pyproject.toml` — it's a Home Assistant config repo, not
-  a versioned package. `ARCRunner` is `main`-only (no `dev`, no promote
-  workflow, no `pyproject.toml`) — it just builds a runner Docker image.
+  a versioned package.
 - **Templates** (`template-python-docker`, `template-python-pypi`,
   `template-docker-ha-addon`, `template-ha-config`,
   `template-infra-main-only`) — real, live starter repos synced from
@@ -55,7 +54,7 @@ repo. Always: feature branch → PR → `dev` → CI green →
   additionally has a `push`-triggered add-on-only path (see its own
   `CLAUDE.md`) that auto-promotes `modeldeck/**` changes without a version
   bump.
-- Repos without a `dev` branch (`ARCRunner`, all 5 templates) use feature
+- The five `template-*` repositories have no `dev` branch and use feature
   branch → PR → `main` directly instead.
 - **One documented, narrow exception**: `scripts/sync-templates.sh`
   direct-pushes sync commits to the 5 `template-*` repos' `main` branch. Those
@@ -435,9 +434,8 @@ Canonical core text lives in `automationnexus/.github` at
 `templates/_shared/.claude/`; each repo keeps its own `description:` line
 and anything below the `<!-- repo-specific -->` marker in those files.
 Propagate shared-core updates with `scripts/sync-shared-claude.sh`
-(PR-based, respects protected branches). ARCRunner keeps a deliberately
-minimal team (`qa-gatekeeper` only) — a documented exception, excluded from
-propagation.
+(PR-based, respects protected branches). Template repositories are handled
+separately by `scripts/sync-templates.sh`.
 
 ## Editing this file / the root .claude
 

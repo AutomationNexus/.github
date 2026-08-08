@@ -10,7 +10,9 @@ repo, on a feature branch.
 
 Audit date: 2026-07-14. Re-run before trusting this record if significant
 time has passed -- see each repo's own `CLAUDE.md`/`.claude/` as the live
-source of truth; this file is a snapshot, not a generator.
+source of truth; this file is a snapshot, not a generator. The ARCRunner
+entries below describe the historical organization state at audit time; that
+repository was subsequently retired and removed from the live registry.
 
 ## Status legend
 
@@ -33,7 +35,7 @@ source of truth; this file is a snapshot, not a generator.
 | `ModelDeck` | full | full-core | exception (confirmed) | `main` default branch is a documented, re-verified exception. Architect routing + settings.json denies confirmed fixed live. |
 | `Uploadarr` | full | full-core | conformant | `domain_agents` registry correction confirmed live. |
 | `HomeAssistant` | config-only | full-core | conformant | Full 8-role roster + `dry-run-deploy` orchestration entry confirmed live, exact match. |
-| `ARCRunner` | minimal | minimal | exception (confirmed) | Deliberately `qa-gatekeeper`-only; internally consistent with registry and its own `CLAUDE.md`. |
+| `ARCRunner` *(historical)* | minimal | minimal | exception (confirmed) | Historical audit result; repository subsequently retired and removed from the live registry. |
 | `template-python-docker` | template (A) | full-core | conformant | Synced live 2026-07-14 (`scripts/sync-templates.sh`, commit `abcc436`). `team_policy` promoted stub -> full-core. |
 | `template-python-pypi` | template (B) | full-core | conformant | Synced live 2026-07-14 (commit `26d8524`). Same promotion. |
 | `template-docker-ha-addon` | template (C) | full-core | conformant | Synced live 2026-07-14 (commit `513853a`). Same promotion. `pyproject.toml` presence is correct/expected, unrelated to the sync. |
@@ -90,7 +92,7 @@ settings -- is tracked separately; see "Still open" in `organogram.md`.)
 - No `pyproject.toml` (correct -- config-only repo, not a versioned package).
 - Status: **conformant**. (Registry's `state: needs-verification` for this repo can be considered satisfied by this pass; flipping the field itself is a registry-maintenance step, not done here to avoid conflating an audit finding with an editorial registry change outside this file's scope.)
 
-## ARCRunner
+## ARCRunner (historical audit record)
 
 - Minimal team (`qa-gatekeeper` only) matches `team_policy: minimal` and the registered `state: exception` exactly. `domain_agents: []` confirmed -- no domain agent files on disk.
 - 3 commands (`execute`, `prepush`, `qa`), all scoped to `Dockerfile.runner` + `build-runner-image.yml`, all resolve.
@@ -107,7 +109,7 @@ standardized repo agent teams", merged 2026-07-11T23:48:54+02:00), which:
   to `templates/_shared/.claude/agents/`, and `execute.md`, `release.md` to
   `templates/_shared/.claude/commands/` -- composed by `sync-templates.sh`
   into every group **except D** (D intentionally skips the `_shared` copy,
-  mirroring the ARCRunner minimal-team exception);
+  following group D's intentional minimal-team policy);
 - added a **group-D-specific** `execute.md` directly to
   `templates/D-infra-main-only/.claude/commands/`.
 

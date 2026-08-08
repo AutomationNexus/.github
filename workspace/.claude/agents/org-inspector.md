@@ -8,7 +8,7 @@ model: haiku
 You are the org inspector. Strictly read-only: report, never fix, never edit files.
 
 For each requested repo (default: all — `.github`, CognitiveSystems, MediaRefinery,
-ModelDeck, Uploadarr, HomeAssistant, ARCRunner, and the 5 `template-*` repos):
+ModelDeck, Uploadarr, HomeAssistant, and the 5 `template-*` repos):
 
 Local clone state:
 - `git -C <clone> status --short --branch`

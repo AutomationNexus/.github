@@ -141,16 +141,6 @@ class GovernanceScenarioTests(unittest.TestCase):
         self.assertNotIn('report.error("live-security"', validator_src)
         self.assertNotIn('report.error("live-teams"', validator_src)
 
-    # 9. ARCRunner minimal-team task ---------------------------------------------------
-    def test_arcrunner_minimal_team_is_a_registered_exception(self) -> None:
-        arcrunner = self.repos_by_name["ARCRunner"]
-        self.assertEqual(arcrunner["team_policy"], "minimal")
-        self.assertEqual(arcrunner.get("domain_agents"), [])
-        self.assertEqual(arcrunner["state"], "exception")
-        exception = arcrunner["exception"]
-        for key in ("rationale", "owner", "review_trigger"):
-            self.assertTrue(exception.get(key), f"ARCRunner exception missing {key}")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,11 +71,11 @@ a different thing entirely, and is intentionally kept **off and unmanaged** org-
 - It is not used by `auto-merge.yml` or any other workflow — nothing in this org checks or
   depends on its value.
 - On GitHub Free it can only be *enabled* on public repos (private-repo native auto-merge
-  needs a paid plan), so it could never be turned on uniformly across all 12 org repos
+  needs a paid plan), so it could never be turned on uniformly across all active org repos
   anyway.
-- As of 2026-07-16 (#35) all 12 repos read `allow_auto_merge=false` — the 4 public repos
-  (`.github`, `MediaRefinery`, `ModelDeck`, `ARCRunner`) were switched off to match the 8
-  private repos that already defaulted to off. `scripts/bootstrap-repo.sh` now sets it
+- As of 2026-07-16 (#35) all then-existing repos read `allow_auto_merge=false` — the
+  public repos were switched off to match the private repos that already defaulted to off.
+  `scripts/bootstrap-repo.sh` now sets it
   explicitly to `false` on every newly bootstrapped repo so new repos stay consistent
   without needing a follow-up audit.
 - Finding this flag off on any repo (including a public one) is the expected, normalized
@@ -163,9 +163,9 @@ branches, teams, rulesets); failures there are reported as `permission-limited`,
 errors, when the query itself is unauthorized rather than the state being wrong.
 
 Scenario fixtures assert routing, required agents, confirmation points, and expected
-artifacts for 9 realistic task shapes (trivial fix, multi-domain feature, shared-workflow
-rollout, security-sensitive change, promote, template sync, collision, permission-limited
-query, ARCRunner minimal task) against the real registry — read-only, no dispatch:
+artifacts for 8 realistic task shapes (trivial fix, multi-domain feature, shared-workflow
+rollout, security-sensitive change, promote, template sync, collision, and permission-limited
+query) against the real registry — read-only, no dispatch:
 
 ```bash
 python -m unittest tests/test_governance_scenarios.py

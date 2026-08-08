@@ -13,8 +13,8 @@
 # marker. Only the shared skeleton above the marker is refreshed.
 #
 # This script never touches: settings.json, domain-engineer agents, repo-specific
-# commands, CLAUDE.md. ARCRunner is deliberately excluded (documented minimal-team
-# exception -- see workspace/CLAUDE.md "Repo-tier standard").
+# commands, CLAUDE.md. Template repositories are handled separately by
+# sync-templates.sh.
 #
 # Usage:
 #   scripts/sync-shared-claude.sh                  # all 5 target repos

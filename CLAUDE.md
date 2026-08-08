@@ -117,8 +117,8 @@ Two separate propagation scripts serve different protection models:
 - `scripts/sync-templates.sh` — bundle → 5 `template-*` repos. Direct-push exception;
   always requires explicit human confirmation. `--check` reports managed `.claude/` orphans.
 - `scripts/sync-shared-claude.sh` — `_shared/.claude` → app repos. Protected-branch-safe:
-  opens feature-branch PRs to `dev`; preserves repo-specific content; excludes ARCRunner's
-  documented minimal-team exception.
+  opens feature-branch PRs to `dev`; preserves repo-specific content. Template repositories
+  are handled separately by `scripts/sync-templates.sh`.
 
 ## Do not
 

@@ -86,8 +86,8 @@ blocked agent escalates to, not what any agent is allowed to mutate.
 
 ## Exceptions are first-class, not gaps
 
-An entry with `state: exception` (ARCRunner's minimal team, the 5 template
-repos' stub teams, `sync-templates-direct-push`,
+An entry with `state: exception` (the template repos' documented team policies,
+`sync-templates-direct-push`,
 `modeldeck-addon-auto-promote`) is a deliberate, reviewed deviation — each one
 carries `rationale`, `owner`, and `review_trigger`. Finding one of these is
 not a defect to silently fix; it's a signal to check whether the

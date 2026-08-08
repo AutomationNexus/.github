@@ -24,7 +24,7 @@ concurrency:
 env:
   PROJECT_NUMBER: "1"
   OWNER: AutomationNexus
-  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant ARCRunner"
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
 
 jobs:
   digest:
@@ -38,7 +38,7 @@ jobs:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant,ARCRunner
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
           permission-organization-projects: read
           permission-pull-requests: read
           permission-issues: read
@@ -47,7 +47,7 @@ jobs:
       - name: Build and post digest
         env:
           # Board/PR/release reads (CI-Bot App token, read-only, scoped to
-          # the 6 synced repos - see mint step above).
+          # the configured project-sync repositories - see mint step above).
           BOT_TOKEN: ${{ steps.app-token.outputs.token }}
           # Tracking-issue write in THIS repo only (.github) - the default
           # GITHUB_TOKEN, scoped by the workflow-level `issues: write`
@@ -89,7 +89,7 @@ jobs:
 
           def bot_gh(*args):
               # Board/PR/release reads only - CI-Bot App token, read-only, scoped to
-              # the 6 synced repos plus org Projects read. Never used for writes.
+              # the configured project-sync repositories plus org Projects read. Never used for writes.
               return _run(BOT_TOKEN, args)
 
           def issue_gh(*args):

@@ -7,7 +7,7 @@ Single-branch infra/image-builder repo. No `dev` branch — feature branches go 
 > **Note on this file's location:** the org convention commits `CLAUDE.md`/`.claude/` on
 > `dev` and strips them from `main`. This repo is **main-only** (no `dev` branch), so that
 > mechanism doesn't apply — this file is committed directly on `main` as a documented
-> exception (see ARCRunner's `CLAUDE.md` for the precedent). If a `dev` branch is ever
+> exception. If a `dev` branch is ever
 > added to a repo made from this template, revisit and move to the standard dev-only
 > convention.
 
@@ -34,17 +34,17 @@ Add lint/build verification commands here once `build-image.yml.example` is rena
 |-------|---------|-------|
 | `qa-gatekeeper` | Branch policy + QA gate before PR | haiku |
 
-Keep this repo's agent set minimal (see ARCRunner) — an architect/reviewer/security-auditor
-is over-engineering for a single Dockerfile/workflow surface. Add them only if this repo's
-scope genuinely grows.
+Keep this repo's agent set minimal — an architect/reviewer/security-auditor is
+over-engineering for a single Dockerfile/workflow surface. Add them only if this repo's scope
+genuinely grows.
 
 ## Slash commands
 
 `/execute` (apply plan + QA gate), `/qa` (QA gate), `/prepush` (PR readiness check).
 
 This group deliberately does NOT ship the org-standard shared core team
-(architect/reviewer/security-auditor) — it mirrors the ARCRunner minimal-team
-exception. `sync-templates.sh` skips the shared `.claude` copy for group D.
+(architect/reviewer/security-auditor). `sync-templates.sh` skips the shared `.claude`
+copy for group D as part of its intentional minimal-team policy.
 
 ## Shared CI — do not inline
 

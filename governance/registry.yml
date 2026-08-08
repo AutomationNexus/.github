@@ -452,21 +452,6 @@ repositories:
       callers -- schedule/dispatch only, issues only, no commit/branch/PR/backup/config/
       router write, and no age key (live SSH is opt-in via a dedicated read-only key).
 
-  - repo: ARCRunner
-    class: minimal
-    default_branch: main
-    branch_flow: "feature -> PR -> main (no dev branch, no promote workflow)"
-    team_policy: minimal
-    domain_agents: []
-    dev_only_files: false
-    sync_role: excluded
-    owning_team: automationnexus-platform
-    state: exception
-    exception:
-      rationale: Single-Dockerfile/one-workflow runner image build does not justify a full team.
-      owner: automationnexus-platform
-      review_trigger: scope grows beyond one Dockerfile/one workflow.
-
   - repo: template-python-docker
     class: template
     group: A-python-docker
@@ -541,18 +526,18 @@ repositories:
       (workspace/CLAUDE.md's concurrent-agent protocol) -- the earlier audit checked local
       HEAD instead of origin/main. team_policy stays stub: unlike A/B/C/E, group D
       deliberately does NOT receive the _shared/.claude core (sync-templates.sh explicitly
-      skips it for group D, mirroring the ARCRunner minimal-team exception) -- it carries
+      skips it for group D as its intentional minimal-team policy) -- it carries
       only qa-gatekeeper + execute/prepush/qa, which is its correct, unchanged, intentional
       shape.
     exception:
       rationale: >
         Starter repo; a full repo-core team (architect/reviewer/security-auditor) is
-        unjustified until a fork adopts real implementation scope. Mirrors the ARCRunner
-        minimal-team exception. Unlike A/B/C/E, sync-templates.sh deliberately excludes
+        unjustified until a fork adopts real implementation scope. Unlike A/B/C/E,
+        sync-templates.sh deliberately excludes
         group D from the _shared/.claude core -- this is permanent policy, not a staged
         drift state.
       owner: automationnexus-platform
-      review_trigger: group D's scope grows beyond infra-only bootstrap (same trigger shape as ARCRunner).
+      review_trigger: group D's scope grows beyond infra-only bootstrap.
 
   - repo: template-ha-config
     class: template

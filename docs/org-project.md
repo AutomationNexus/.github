@@ -68,7 +68,6 @@ linked from another repo. Each linked PR classifies into at most one stage:
 | Merged to `dev`, merge commit reachable from `main`'s tip | **Released** |
 | Merged to `dev`, merge commit not yet reachable from `main` | **On Dev** |
 | Merged to `main`, head `sync/publish-main-*` | **Released** |
-| Merged straight to `main` in a main-only repo (e.g. `ARCRunner`) | **Released** |
 | Anything else (closed unmerged; merged to another base; out-of-scope repo) | *(not classifiable)* |
 
 If an issue has more than one linked PR, the **furthest-progressed**
@@ -155,7 +154,7 @@ of the lean default set.)
 CI-Bot App token and writes org-Project fields; `GITHUB_TOKEN` is retained
 with `contents: read` but cannot write org Projects. The App token is
 restricted to `CognitiveSystems`, `MediaRefinery`, `ModelDeck`, `Uploadarr`,
-`HomeAssistant`, and `ARCRunner`, with pull-requests read, issues read,
+`HomeAssistant`, with pull-requests read, issues read,
 contents read, and organization-projects write.
 
 The sweep is issue-driven: for every Project item that is an **Issue**, it

@@ -9,7 +9,6 @@
 | MediaRefinery | main-dev | `[linux,x64,k3s,ubuntu-latest]` | ✓ | ✓ | - | ✓ | ✓ | ✓ | ✓ | docker |
 | ModelDeck | main-dev | `[linux,x64,k3s,ubuntu-latest]` | - | - | ✓(mosquitto) | ✓ | ✓ | ✓(bespoke, +addon) | ✓ | docker + in-repo HA add-on (modeldeck/, modeldeck-nightly/) |
 | Uploadarr | main-dev | `[linux,x64,k3s,ubuntu-latest]` | ✓ | ✓ | - | ✓ | ✓ | ✓ | ✓ | docker |
-| ARCRunner | main-only | `[linux,x64,k3s,ubuntu-latest]` | - | - | - | - | - | - | - | none (img-build) |
 
 ## Reusable Workflows (`automationnexus/.github`)
 
@@ -62,7 +61,7 @@
 - protect-main.json: PR required, no deletions, no fast-forward
   - Required: Guard Main Source Branch, hygiene, lint, test-standards, Python Tests, Semgrep (prefix: `ci / `)
 - protect-dev.json: same structure, different contexts
-- protect-main-only.json: for ARCRunner
+- protect-main-only.json: for main-only repositories
 
 ## Key Decisions
 - Reusable workflows, copy-paste eliminated
