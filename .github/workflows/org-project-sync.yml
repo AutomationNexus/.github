@@ -32,7 +32,7 @@ concurrency:
 env:
   PROJECT_NUMBER: "1"
   OWNER: AutomationNexus
-  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant ARCRunner"
+  REPOS: "CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant"
 
 jobs:
   sync:
@@ -46,7 +46,7 @@ jobs:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant,ARCRunner
+          repositories: CognitiveSystems,MediaRefinery,ModelDeck,Uploadarr,HomeAssistant
           permission-pull-requests: read
           permission-issues: read  # for Area/Type on private-repo issues; no-op until the CI-Bot App is granted Issues:read
           permission-contents: read
@@ -69,12 +69,6 @@ jobs:
           OWNER = os.environ["OWNER"]
           NUMBER = int(os.environ["PROJECT_NUMBER"])
           REPOS = os.environ["REPOS"].split()
-          # Main-only repos (no dev branch - e.g. ARCRunner, which just builds a
-          # runner image and merges feature branches straight to main). A small
-          # explicit set, rather than inferring "no dev base ever seen" from the
-          # data - that heuristic would misclassify a real dev/main repo that
-          # simply has no recent dev-PR activity in the current items page.
-          MAIN_ONLY_REPOS = {"ARCRunner"}
           DRY_RUN = os.environ["DRY_RUN"].lower() == "true"
           WRITE_PROBE = os.environ["WRITE_PROBE"].lower() == "true"
 
@@ -362,12 +356,6 @@ jobs:
                       # pin-sync push) just landed on main - deliberately
                       # broader than just the "-promote-" prefix, see gap-2
                       # notes.
-                      return "Released"
-                  if repo in MAIN_ONLY_REPOS:
-                      # Main-only repos (no dev branch - e.g. ARCRunner)
-                      # merge ordinary feature branches straight to main;
-                      # that merge IS the release, there's no separate
-                      # promote/publish step to wait for.
                       return "Released"
                   return None
               # MERGED to a base other than dev/main, or CLOSED unmerged.

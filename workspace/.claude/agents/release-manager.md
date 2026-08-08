@@ -35,7 +35,7 @@ Per-repo quirks you must respect:
   suggest removing that.
 - **HomeAssistant**: has a promote workflow but no `pyproject.toml` — bump-type is a
   no-op there; promotion just publishes config state to `main`.
-- **ARCRunner + the 5 `template-*` repos**: no `dev` branch, no promote workflow —
-  nothing to release; refuse with an explanation.
+- **The 5 `template-*` repos**: no `dev` branch, no promote workflow — nothing to
+  release; refuse with an explanation.
 - A `cancelled` promote run may still have opened a PR that merged later — check for
   the resulting PR/tag before concluding it did nothing.

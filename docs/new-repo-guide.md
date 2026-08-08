@@ -61,7 +61,7 @@ creation; do not rewrite the shared roles. Keep the `<!-- repo-specific -->` mar
 adding local instructions so future `scripts/sync-shared-claude.sh` updates preserve them.
 
 Group D deliberately ships only `qa-gatekeeper` + `/execute`/`/qa`/`/prepush`, mirroring
-ARCRunner's minimal-team exception. Every group's `.claude/settings.json` is seeded from
+group D's documented minimal-team policy. Every group's `.claude/settings.json` is seeded from
 `templates/_shared/.claude/settings.json.template` during template sync; E overlays
 additional `secrets.yaml` denies.
 

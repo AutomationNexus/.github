@@ -60,8 +60,8 @@ The original migration established repo-tier teams. The org now adds a second ti
   shared skeletons live in `templates/_shared/.claude/`; per-repo content below
   `<!-- repo-specific -->` remains local and is preserved by
   `scripts/sync-shared-claude.sh`.
-- ARCRunner/group D remain deliberately minimal (`qa-gatekeeper` only) because their
-  one-Dockerfile/one-workflow surface does not justify a full team.
+- Group D remains deliberately minimal (`qa-gatekeeper` only) because its
+  one-Dockerfile/one-workflow starter surface does not justify a full team.
 
 `CLAUDE.md` cascades from the workspace root into repo sessions; `.claude/agents` and
 `.claude/commands` do not. Therefore org→repo handoff is a written `/dispatch` brief,

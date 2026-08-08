@@ -32,8 +32,8 @@ Use `runner-labels: '["linux","x64","k3s","ubuntu-latest"]'` in every wrapper.
   (sonnet), `security-auditor` (sonnet/high), plus `/execute`, `/qa`, `/prepush`,
   `/release`. The group-specific `.claude/` directory overlays that core (e.g. C's
   add-on QA, E's yamllint/HA QA) and wins on conflicts.
-- Group D deliberately mirrors ARCRunner's minimal-team exception: only
-  `qa-gatekeeper` + `/execute`/`/qa`/`/prepush`; shared core copy is skipped.
+- Group D deliberately uses a minimal team: only `qa-gatekeeper` +
+  `/execute`/`/qa`/`/prepush`; shared core copy is skipped.
 - Every group gets `.claude/settings.json` from
   `_shared/.claude/settings.json.template` at sync time. A/B/C/D correctly have no
   bundle-level settings copy; E legitimately overlays it with `secrets.yaml` denies.

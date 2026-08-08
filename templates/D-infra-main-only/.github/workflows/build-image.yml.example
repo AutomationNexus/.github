@@ -1,4 +1,4 @@
-# Repo-specific image builder (not reusable). Example based on ARCRunner.
+# Repo-specific image builder (not reusable) for a main-only repository.
 # Rename to build-image.yml and adjust IMAGE / Dockerfile / paths.
 name: Build Image
 

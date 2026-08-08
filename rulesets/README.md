@@ -27,7 +27,7 @@ gh api repos/AutomationNexus/.github/rulesets -X POST --input protect-master.jso
 triggered them on itself, so before this ruleset existed its own PRs reported zero status
 checks. `self-ci.yml` and `self-semgrep.yml` are the thin caller wrappers that give
 `.github` the same `ci / hygiene`, `ci / lint`, `semgrep / Semgrep` checks every consumer
-repo already has (same pattern as `ARCRunner/.github/workflows/ci.yml` for the `main-only`
+repo already has (the standard `main-only` CI pattern)
 branch model and `CognitiveSystems/.github/workflows/semgrep.yml`) — named `self-*` only
 because `ci.yml`/`semgrep.yml` are already taken by the reusable-workflow source files in
 this same directory. Without them, `required_status_checks` in `protect-master.json` would

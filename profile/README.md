@@ -11,7 +11,6 @@ See `.github/workflows/` for reusable templates and `.github/rulesets/` for bran
 | [`.github`](https://github.com/AutomationNexus/.github) | Meta — reusable workflows, templates, scripts, governance | feature → PR → `master` |
 | `CognitiveSystems`, `MediaRefinery`, `ModelDeck`, `Uploadarr` | Application repos (versioned, auto-tagged releases) | feature → PR → `dev` → CI → `main` → release |
 | `HomeAssistant` | Home Assistant configuration (no release versioning) | feature → PR → `dev` → CI → `main` |
-| `ARCRunner` | CI runner container image | feature → PR → `main` (no `dev`) |
 | `template-python-docker`, `template-python-pypi`, `template-docker-ha-addon`, `template-infra-main-only`, `template-ha-config` | Starter templates for new repos in each group | feature → PR → `main` (no `dev`) |
 
 ## Ownership, support, and security

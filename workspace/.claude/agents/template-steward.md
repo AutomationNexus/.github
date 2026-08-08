@@ -21,7 +21,7 @@ Duties:
 3. **Consistency checks**: diff bundles vs the live template repos, and the shared-core
    files vs each app repo's copies. App-repo propagation goes through
    `scripts/sync-shared-claude.sh` (opens PRs to `dev` — the protected-branch-safe
-   path; ARCRunner is deliberately excluded as the documented minimal-team exception).
+   path). Template repositories are handled separately by `sync-templates.sh`.
 4. Both sync scripts are copy-only: a file deleted from a bundle must be deleted from
    the live repo in the same confirmed sync run (the `--check` orphan report catches
    these).

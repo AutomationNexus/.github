@@ -1,6 +1,6 @@
 # Group D — Infra / image builder (main-only)
 
-Template for a single-branch infra repo. Matches ARCRunner.
+Template for a single-branch infra/image-builder repository.
 No `dev` branch, no promote/nightly — feature branches go straight to `main` via PR.
 
 CI/CD is provided by the org reusable workflows in `automationnexus/.github@v1`.

@@ -72,17 +72,14 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 | `ModelDeck` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | exception |
 | `Uploadarr` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
 | `HomeAssistant` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
-| `ARCRunner` | minimal | `main` | minimal | excluded | automationnexus-platform | exception |
 | `template-python-docker` | template (A) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-python-pypi` | template (B) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-docker-ha-addon` | template (C) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-infra-main-only` | template (D) | `main` | stub | template-target | automationnexus-platform | active |
 | `template-ha-config` | template (E) | `main` | full-core | template-target | automationnexus-platform | active |
 
-Every row above is now `active`, confirmed live, except the two documented,
-permanent exceptions: `ModelDeck` (default branch `main`, not `dev` — see
-its `registry.yml` `exception:` block) and `ARCRunner` (minimal single-image
-build, no full team justified).
+Every row above is active and confirmed live, except the documented `ModelDeck`
+default-branch exception (`main`, not `dev`; see its `registry.yml` `exception:` block).
 
 ## Repo-core team (every `full-core`/`meta-core` repo)
 
@@ -163,7 +160,7 @@ repo's sibling clone (see "Resolved" #7 below).
    `settings.json` branch-protection denies. Full record:
    [`conformance.md`](conformance.md). Result: 7 of 12 repos conformant or
    a confirmed exception (`.github`, CognitiveSystems, MediaRefinery,
-   ModelDeck, Uploadarr, HomeAssistant, ARCRunner); the 5 template repos
+   ModelDeck, Uploadarr, HomeAssistant); the 5 template repos
    were found out of sync with a canonical change (commit `39558a0`,
    2026-07-11) that added the full shared core to groups A/B/C/E and a new
    `execute.md` to group D. `registry.yml` and `workspace/CLAUDE.md`
@@ -202,7 +199,7 @@ repo's sibling clone (see "Resolved" #7 below).
     are `workflow_call`-only definitions it never triggered on its own PRs
     (confirmed live: `.github` PR #24 originally reported an empty
     `statusCheckRollup`). Fixed by adding thin `self-ci.yml`/`self-semgrep.yml`
-    caller wrappers (same pattern as `ARCRunner`'s `main-only` wrapper and
+    caller wrappers (following the reusable main-only workflow pattern and
     `CognitiveSystems`'s semgrep caller) plus a `.yamllint` config (`extends:
     relaxed`, `line-length.max: 240` — precedent: `CognitiveSystems/.yamllint`)
     to accommodate this repo's own pre-existing long lines, then applying
@@ -217,8 +214,8 @@ repo's sibling clone (see "Resolved" #7 below).
     shared-core files (`agents/security-auditor.md`, `commands/execute.md`,
     `commands/release.md`) without propagating them downstream.
     `sync-shared-claude.sh` run against all 5 app repos (CognitiveSystems,
-    MediaRefinery, ModelDeck, Uploadarr, HomeAssistant; ARCRunner excluded by
-    its documented minimal-team exception) opened one PR per repo, each
+    MediaRefinery, ModelDeck, Uploadarr, HomeAssistant) opened one PR per repo,
+    each
     touching exactly those 3 files and preserving every repo's own
     `description:` line and repo-specific content below the
     `<!-- repo-specific -->` marker. All 5 merged into `dev` via
