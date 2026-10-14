@@ -452,6 +452,27 @@ repositories:
       callers -- schedule/dispatch only, issues only, no commit/branch/PR/backup/config/
       router write, and no age key (live SSH is opt-in via a dedicated read-only key).
 
+  - repo: ProfilarrDatabase
+    class: minimal
+    default_branch: cs-sync
+    branch_flow: "feature -> PR -> cs-sync (tooling); v2 = upstream Dictionarry-Hub/database v2 + tweaks/, advanced only by the sync job's upstream merge or a tweaks/ PR"
+    team_policy: stub
+    dev_only_files: false
+    sync_role: excluded
+    owning_team: automationnexus-app-maintainers
+    state: desired
+    notes: >
+      Private data mirror of Dictionarry-Hub/database (branch v2) plus the operator's
+      tweaks/NN.*.sql, linked by Profilarr v2 as its PCD (CognitiveSystems
+      new_design ADR-015, RISKS R34). Created 2026-10-14 on explicit human
+      confirmation. NEVER make public: upstream publishes no license. On v2, ops/,
+      pcd.json and .github/ stay byte-identical to upstream; upstream's own workflows
+      (notify.yml, devSync.yml) must stay disabled here. Repo Actions are OFF until the
+      sync workflow lands on cs-sync -- state stays `desired` until then. No agent
+      team, no release/versioning, no promote flow; Free plan, so no ruleset can
+      protect v2 -- discipline plus the sync job's validation compile is the gate.
+      See exception profilarr-mirror-sync-push.
+
   - repo: template-python-docker
     class: template
     group: A-python-docker
@@ -570,6 +591,18 @@ authority_classes:
 # Explicit exceptions not already captured on a repo/agent entry above.
 # -----------------------------------------------------------------------------
 exceptions:
+  - id: profilarr-mirror-sync-push
+    description: >
+      ProfilarrDatabase's scheduled sync job (on its cs-sync default branch, ARC
+      runners, CI-Bot App token) pushes an upstream merge straight to the mirror's v2
+      branch without a PR. It merges upstream Dictionarry-Hub/database v2 (never
+      rewrites history), runs a validation compile with the tweaks applied, and pushes
+      only when every assertion holds (target profiles exist, every tweak changes a
+      row, ops/ pcd.json .github/ equal upstream). v2 is a data branch, not a dev/main/
+      master trunk; changes to tweaks/ still go through a PR.
+    owner: automationnexus-app-maintainers
+    review_trigger: the job pushes anything other than an upstream merge, or skips the validation compile.
+
   - id: sync-templates-direct-push
     description: >
       scripts/sync-templates.sh direct-pushes to the 5 template-* repos' main branch --
