@@ -175,6 +175,14 @@ on:
         # Dockerfile.runner), so a plain install finds it instead of downloading.
         default: 'python -m playwright install chromium'
         type: string
+      e2e-report-path:
+        description: "Path (relative to the repo root, not e2e-working-dir) to upload from the e2e job as an artifact, e.g. a Playwright HTML report; empty disables the upload"
+        required: false
+        # Off by default, so callers that don't set it get no extra step. The path is
+        # resolved against the workspace root: `working-directory` only applies to `run`
+        # steps, never to `uses: actions/upload-artifact`.
+        default: ""
+        type: string
     secrets:
       ci-bot-app-id:
         required: false
@@ -643,6 +651,18 @@ jobs:
           done
           echo "::error::E2E tests failed after 3 attempts"
           exit 1
+      # Diagnostics, not the verdict, same reasoning as security-reports-* below: it runs
+      # on `always()` because the failed run is the one worth inspecting, and an upload
+      # blip must never turn a green e2e job red. Nothing downstream consumes it.
+      - name: Upload E2E report
+        if: always() && inputs.e2e-report-path != ''
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: e2e-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ inputs.e2e-report-path }}
+          retention-days: 7
+          if-no-files-found: ignore
 
   security:
     if: inputs.has-security && github.event_name == 'pull_request'
