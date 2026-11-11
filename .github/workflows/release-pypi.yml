@@ -15,6 +15,14 @@ on:
         required: false
         default: ""
         type: string
+      spa-build-in-publish:
+        description: >-
+          Build the SPA inside the publish job (from the release tag's checkout) instead of a
+          separate frontend job plus an artifact hand-off. Use when Actions artifact storage is
+          unavailable (e.g. the quota is hit). Requires has-frontend.
+        required: false
+        default: false
+        type: boolean
       node-version:
         required: false
         default: "24"
@@ -90,7 +98,7 @@ jobs:
           echo "event_kind=$KIND" >> "$GITHUB_OUTPUT"
 
   frontend:
-    if: inputs.has-frontend
+    if: inputs.has-frontend && !inputs.spa-build-in-publish
     name: Frontend
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
@@ -115,7 +123,7 @@ jobs:
       always() &&
       needs.prepare.result == 'success' &&
       needs.prepare.outputs.event_kind != 'noop' &&
-      (inputs.has-frontend == false || needs.frontend.result == 'success')
+      (inputs.has-frontend == false || inputs.spa-build-in-publish || needs.frontend.result == 'success')
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     steps:
       - uses: actions/checkout@v6
@@ -124,7 +132,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
-      - if: inputs.has-frontend
+      - if: inputs.has-frontend && inputs.spa-build-in-publish
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: inputs.has-frontend && inputs.spa-build-in-publish
+        name: Build SPA in place (no artifact hand-off)
+        working-directory: frontend
+        run: npm ci && npm run build
+      - if: inputs.has-frontend && !inputs.spa-build-in-publish
         uses: actions/download-artifact@v8
         with:
           name: spa-dist-${{ github.run_id }}
