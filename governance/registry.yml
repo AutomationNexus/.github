@@ -452,6 +452,26 @@ repositories:
       callers -- schedule/dispatch only, issues only, no commit/branch/PR/backup/config/
       router write, and no age key (live SSH is opt-in via a dedicated read-only key).
 
+  - repo: OPNsense_Systems
+    class: config-only
+    default_branch: dev
+    branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main (bump-type + version-file=VERSION) -> PR -> main -> release-tag.yml (tag + GitHub Release; version sourced from VERSION file; pyproject.toml is tooling-only and outside bump-type scope)"
+    team_policy: full-core
+    domain_agents: [opnsense-engineer, routing-engineer, radius-engineer, proxmox-engineer, network-researcher, migration-planner]
+    dev_only_files: true
+    sync_role: consumer
+    owning_team: automationnexus-app-maintainers
+    state: active
+    notes: >
+      Private digital-twin / GitOps repo for an OPNsense VM on Proxmox that replaces
+      the MikroTik CHR VPN hub; mirrors MikroTik_Systems. Created from
+      template-ha-config and bootstrapped (group E, private) on 2026-11-13; default
+      branch dev, CI-Bot secrets set, scaffold merged via PR #1. No vX.Y.Z tag exists
+      until its first promote, so org-project-sync.yml reports merges as "On Dev"
+      until then. Its pyproject.toml is tooling-only (static version). Repo commands
+      (/netctl-plan, /drift-report, /handover, /cutover-check, /backup-verify) are
+      repo-local and, as for MikroTik_Systems, not enumerated in this registry.
+
   - repo: ProfilarrDatabase
     class: minimal
     default_branch: cs-sync

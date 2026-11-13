@@ -72,6 +72,7 @@ and `.claude/` doesn't cascade). The link is a **handoff brief**, produced by
 | `ModelDeck` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | exception |
 | `Uploadarr` | full | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
 | `HomeAssistant` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
+| `OPNsense_Systems` | config-only | `dev` | full-core | consumer | automationnexus-app-maintainers | active |
 | `template-python-docker` | template (A) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-python-pypi` | template (B) | `main` | full-core | template-target | automationnexus-platform | active |
 | `template-docker-ha-addon` | template (C) | `main` | full-core | template-target | automationnexus-platform | active |

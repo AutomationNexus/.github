@@ -37,6 +37,7 @@ repo_prefix() {
     Uploadarr)        echo "ua" ;;
     HomeAssistant)    echo "ha" ;;
     MikroTik_Systems) echo "mt" ;;
+    OPNsense_Systems) echo "os" ;;
     *) echo "unknown/unsupported target repo: $1" >&2; exit 1 ;;
   esac
 }
@@ -86,7 +87,7 @@ merge_file() {
 }
 
 if [ "$#" -eq 0 ]; then
-  TARGETS=(CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant MikroTik_Systems)
+  TARGETS=(CognitiveSystems MediaRefinery ModelDeck Uploadarr HomeAssistant MikroTik_Systems OPNsense_Systems)
 else
   TARGETS=("$@")
 fi
