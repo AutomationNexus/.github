@@ -436,7 +436,7 @@ repositories:
     default_branch: dev
     branch_flow: "feature -> PR -> dev -> auto-merge -> dev -> promote-dev-to-main (bump-type + version-file=VERSION) -> PR -> main -> release-tag.yml (tag + GitHub Release; version sourced from VERSION file, no pyproject.toml)"
     team_policy: full-core
-    domain_agents: [network-doctor, wireguard-engineer, hotspot-radius-engineer, firewall-nat-engineer, backup-operator, drift-auditor, network-inspector, release-operator]
+    domain_agents: [fleet-planner, router-engineer, fleet-auditor, network-inspector, rollout-operator]
     dev_only_files: true
     sync_role: consumer
     owning_team: automationnexus-app-maintainers
@@ -451,6 +451,13 @@ repositories:
       monitors (backup-health.yml, drift-check.yml) run on ARC beside the shared workflow
       callers -- schedule/dispatch only, issues only, no commit/branch/PR/backup/config/
       router write, and no age key (live SSH is opt-in via a dedicated read-only key).
+      2026-11-14: clean restart -- the repo was deleted and recreated empty under the
+      same name from template-ha-config (no old history, PRs, issues or tags), then
+      loaded from a fresh encrypted baseline. The Epic 11 compiler stack and its eight
+      domain agents were dropped; the five domain agents above replace them
+      (fleet-planner on opus plans; router-engineer drafts desired-state/changes;
+      fleet-auditor audits read-only; rollout-operator runs backups and guarded applies).
+      Private Free-plan repo, so no rulesets: CI guards plus auto-revert: true.
 
   - repo: ProfilarrDatabase
     class: minimal
