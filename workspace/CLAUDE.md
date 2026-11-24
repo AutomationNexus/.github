@@ -80,6 +80,31 @@ shared workflow in `.github` — never a one-off fork/inline copy in the
 consumer repo. Precedent inputs: `build-args`, `main-source-allow-glob`,
 `exclude-paths`, `strip-dev-only-paths`, `bump-type`.
 
+## Frontend design system (org contract)
+
+Every React SPA in the org shares one substrate: React 19 + Vite + strict TS,
+vitest, hand-written CSS over three-layer custom-property tokens, Inter Variable
++ JetBrains Mono Variable (latin slice, self-hosted — the CSP is
+`default-src 'self'`), native elements first with **Radix Primitives the only
+headless library and only where a widget actually needs one**, inline SVG icons,
+and a Playwright + `@axe-core/playwright` gate at zero violations, both themes,
+1440/1024/390.
+
+- Canonical: `automationnexus/.github` → `governance/design-system.md` (the
+  contract) and `design/tokens.shared.css` (the token file). Consumers vendor
+  the latter **verbatim** at `src/styles/tokens.shared.css` (sha256
+  `00bd29d2…acd598`, git blob `fb861e36`) and keep only component-layer tokens
+  locally; a shared token is never redefined in a consumer.
+- One palette: **Glacier**, dark default plus light. A repo needing another
+  palette records an `exceptions:` entry in `governance/registry.yml` — never a
+  silent fork. Only `mediarefinery-tailwind` is registered today.
+- Adopted: CognitiveSystems (reference implementation, v1.5.1), Uploadarr
+  (tokens, fonts, Radix boundary). ModelDeck is next at near-zero cost.
+- Change it in `.github` by PR (human-merged) and re-vendor — not in a consumer
+  repo, and not as a local override. `scripts/sync-design.sh --check` is the
+  desired automation; until it exists, re-vendoring is a manual copy with a
+  hash check in review.
+
 ## Auto-versioning (`bump-type`)
 
 `promote-dev-to-main.yml` takes a `workflow_dispatch` input `bump-type`:

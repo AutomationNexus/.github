@@ -70,8 +70,8 @@ contract unifies the substrate, not the screens.
 
 | Repo | Shared tokens | Fonts | Widget policy | a11y gate | State |
 |---|---|---|---|---|---|
-| CognitiveSystems | canonical source; splits its shared layer at v1.5.1 | adopting at v1.5.1 | native today; Radix per-widget going forward | Playwright + axe | `active` |
-| Uploadarr | to vendor + alias its existing custom properties onto the shared names; **palette becomes the shared Glacier** (operator decision 2026-11-24 — no palette override) | already Inter + JetBrains Mono (switch to the latin slice) | Radix, 8 primitives | gate missing — add | `desired` |
+| CognitiveSystems | canonical source; vendored and shipped at v1.5.1 (`00bd29d2…`) | Inter + JetBrains Mono Variable, latin slice | native today; Radix per-widget going forward | Playwright + axe, green | `active` |
+| Uploadarr | vendored + aliased onto the shared names (#110); palette is the shared **Glacier** (operator decision 2026-11-24 — no override) | Inter + JetBrains Mono Variable, latin slice | Radix, 8 primitives, all behind `components/primitives/` | harness added in #113 (open): color-contrast went 44/44 scans → 0 at 1440 + 390; `select-name`, `label` and `scrollable-region-focusable` tracked to M5b/M7/M8; 1024 px not yet covered | `desired` |
 | ModelDeck | to vendor | to adopt | no library | to add | `desired` |
 | MediaRefinery | Tailwind today — registered exception | — | Headless UI — registered exception | — | `exception` |
 
