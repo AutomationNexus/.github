@@ -1,0 +1,75 @@
+/* AutomationNexus shared design tokens — v1 (2026-11-24).
+ *
+ * CANONICAL SOURCE: automationnexus/.github — design/tokens.shared.css
+ * CONTRACT:        governance/design-system.md
+ *
+ * This file owns the PRIMITIVE and SEMANTIC layers only. A consuming repo vendors it verbatim at
+ * src/styles/tokens.shared.css and adds its own COMPONENT-layer tokens in a separate file
+ * (panel, row, shell geometry such as --topbar-h / --sidebar-w). A consumer may not redefine any
+ * token declared here; if a value is wrong for the org, change it here and re-vendor.
+ *
+ * Dark is the default theme; [data-theme="light"] overrides it. Every color has a value in both
+ * blocks — never define a color only inside one theme.
+ */
+:root {
+  /* Type. The apps self-host Inter Variable and JetBrains Mono Variable from their own bundle
+     (@fontsource-variable/<face>/latin.css) because every app's CSP is default-src 'self'; a font
+     CDN is never allowed. The system stacks after the first two entries are the fallback path. */
+  --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",
+    "Segoe UI Mono", Menlo, Consolas, monospace;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-base: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+  --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600;
+
+  /* Space, radius, control metrics. */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+  --r-sm: 8px; --r-md: 10px; --r-lg: 12px; --r-pill: 999px;
+  --h-row: 32px; --h-ctl: 28px;
+  --content-max: 1440px; --tile-min: 240px;
+
+  --motion: 140ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Dark theme (default), Glacier accent. v1.5: glass level 3 is opaque — no backdrop-filter anywhere,
+   so floating chrome never lets scrolled content show through. */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg-page: #0b0f17; --bg-solid: #121826; --bg-inset: rgba(0, 0, 0, 0.24);
+  --bg-log: #070a10; --fg-log: #cfd5e0;
+  --glass-1: rgba(255, 255, 255, 0.04); --glass-2: rgba(255, 255, 255, 0.06); --glass-3: var(--bg-solid);
+  --edge: rgba(255, 255, 255, 0.08); --edge-strong: rgba(255, 255, 255, 0.14);
+  --fg: #e5e9f0; --fg-muted: #adb6c4;
+  --status-ok: #4cc38a; --status-warn: #d9a84e; --status-fail: #e5736f; --status-info: #6aa5e8;
+  --status-ok-text: #8fdcb4; --status-warn-text: #ebc888; --status-fail-text: #f2a5a2; --status-info-text: #a9c9f2;
+  --status-ok-tint: rgba(76, 195, 138, 0.12); --status-warn-tint: rgba(217, 168, 78, 0.12);
+  --status-fail-tint: rgba(229, 115, 111, 0.12); --status-info-tint: rgba(106, 165, 232, 0.12);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 40px -16px rgba(0, 0, 0, 0.6);
+  --accent-text: #5fc4d6; --accent-fill: #157a8e; --accent-on: #ffffff;
+  --accent-tint: rgba(95, 196, 214, 0.12); --accent-edge: rgba(95, 196, 214, 0.35);
+}
+
+/* Light theme. Glass levels 1 and 2 tint with slate ink, level 3 with white. */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-page: #f7f8fa; --bg-solid: #ffffff; --bg-inset: rgba(255, 255, 255, 0.8);
+  --bg-log: #ffffff; --fg-log: #1f2937;
+  --glass-1: rgba(15, 23, 42, 0.04); --glass-2: rgba(15, 23, 42, 0.06); --glass-3: var(--bg-solid);
+  --edge: rgba(15, 23, 42, 0.08); --edge-strong: rgba(15, 23, 42, 0.16);
+  --fg: #111827; --fg-muted: #4b5565;
+  --status-ok: #1a7f53; --status-warn: #9e6408; --status-fail: #c0413c; --status-info: #2f6fca;
+  --status-ok-text: #0b5a34; --status-warn-text: #6d4505; --status-fail-text: #8c2621; --status-info-text: #1a4790;
+  --status-ok-tint: rgba(26, 127, 83, 0.1); --status-warn-tint: rgba(158, 100, 8, 0.1);
+  --status-fail-tint: rgba(192, 65, 60, 0.1); --status-info-tint: rgba(47, 111, 202, 0.1);
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -12px rgba(15, 23, 42, 0.16);
+  --shadow-2: 0 2px 4px rgba(15, 23, 42, 0.08), 0 16px 40px -16px rgba(15, 23, 42, 0.24);
+  --accent-text: #0a5f73; --accent-fill: #0e7490; --accent-on: #ffffff;
+  --accent-tint: rgba(14, 116, 144, 0.1); --accent-edge: rgba(14, 116, 144, 0.3);
+}
+
+/* Reduced motion is part of the contract, not an app choice. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0s; }
+  *, ::before, ::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
