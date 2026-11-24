@@ -71,7 +71,7 @@ contract unifies the substrate, not the screens.
 | Repo | Shared tokens | Fonts | Widget policy | a11y gate | State |
 |---|---|---|---|---|---|
 | CognitiveSystems | canonical source; splits its shared layer at v1.5.1 | adopting at v1.5.1 | native today; Radix per-widget going forward | Playwright + axe | `active` |
-| Uploadarr | to vendor + alias its existing custom properties onto the shared names | already Inter + JetBrains Mono (switch to the latin slice) | Radix, 8 primitives | gate missing — add | `desired` |
+| Uploadarr | to vendor + alias its existing custom properties onto the shared names; **palette becomes the shared Glacier** (operator decision 2026-11-24 — no palette override) | already Inter + JetBrains Mono (switch to the latin slice) | Radix, 8 primitives | gate missing — add | `desired` |
 | ModelDeck | to vendor | to adopt | no library | to add | `desired` |
 | MediaRefinery | Tailwind today — registered exception | — | Headless UI — registered exception | — | `exception` |
 

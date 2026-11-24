@@ -686,17 +686,3 @@ exceptions:
       shared token layer gains a capability (for example a brand palette) that Tailwind
       cannot express without porting.
 
-  - id: uploadarr-control-room-palette
-    description: >
-      Uploadarr keeps its "Control Room" palette instead of the Glacier values in
-      design/tokens.shared.css. It vendors the shared file (structure, type scale,
-      spacing, radius, motion, semantic token names) but overrides the color tokens
-      with its own values in a single palette block, so the app is on the org stack
-      without a visual re-paint nobody asked for. Everything else in
-      governance/design-system.md applies: the font pair, the Radix-only widget rule,
-      and the Playwright + axe gate.
-    owner: automationnexus-app-maintainers
-    review_trigger: >
-      the operator decides to move Uploadarr onto the Glacier palette, Uploadarr starts
-      a visual redesign, or a second repo asks to keep a non-shared palette (two
-      overrides in one org means the shared palette rule is not doing its job).
