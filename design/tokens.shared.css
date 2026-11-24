@@ -12,9 +12,10 @@
  * blocks — never define a color only inside one theme.
  */
 :root {
-  /* Type. The apps self-host Inter Variable and JetBrains Mono Variable from their own bundle
-     (@fontsource-variable/<face>/latin.css) because every app's CSP is default-src 'self'; a font
-     CDN is never allowed. The system stacks after the first two entries are the fallback path. */
+  /* Type. The apps self-host Inter Variable and JetBrains Mono Variable from their own bundle,
+     declaring only the package's latin slice (@fontsource-variable/<face>/files/*-latin-wght-normal.woff2),
+     because every app's CSP is default-src 'self' and no font CDN is allowed. The system stacks
+     after the first two entries are the fallback path for every non-latin character. */
   --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
     "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",

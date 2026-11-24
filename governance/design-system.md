@@ -15,7 +15,7 @@ widget library). MediaRefinery is a registered `exceptions:` entry in `registry.
 | Test tool | vitest + `@testing-library/react` | Identical in every repo. |
 | Styling | Hand-written CSS over three-layer custom properties (primitive → semantic → component) | Token-driven plain CSS is what lets one token file drive four apps without a build-time framework. |
 | Shared tokens | `design/tokens.shared.css` (this repo) — vendored as `src/styles/tokens.shared.css` | Single source for color, type, spacing, radius, motion, control metrics. |
-| Fonts | Inter Variable (UI) + JetBrains Mono Variable (code, ids, numerics), self-hosted via `@fontsource-variable/<face>/latin.css` | Every app's CSP is `default-src 'self'`; a font CDN is not an option, and the latin subset keeps the wheel/bundle small. |
+| Fonts | Inter Variable (UI) + JetBrains Mono Variable (code, ids, numerics), self-hosted from the app's own bundle via `@fontsource-variable/<face>` | Every app's CSP is `default-src 'self'`; a font CDN is not an option. Declare only the **latin slice** — two `@font-face` rules pointing at the package's `files/*-latin-wght-normal.woff2` (88 KB for both faces). Importing the package's `index.css` ships every subset (≈400 KB) because the bundler copies every referenced file, whatever its `unicode-range`. |
 | Headless widgets | **Radix Primitives — the only headless UI library, used only where a widget needs one** | Menus, typeahead listboxes and positioning-aware tooltips are where hand-built code loses. Everything else stays native. |
 | Icons | Inline SVG from one icon set | No icon font, no runtime fetch, no second dependency. |
 | Accessibility gate | Playwright + `@axe-core/playwright`: zero violations on the WCAG 2.1 AA tag set (minimum), both themes, at 1440 / 1024 / 390 | A repo without this gate cannot claim the shared stack. |
@@ -71,7 +71,7 @@ contract unifies the substrate, not the screens.
 | Repo | Shared tokens | Fonts | Widget policy | a11y gate | State |
 |---|---|---|---|---|---|
 | CognitiveSystems | canonical source; splits its shared layer at v1.5.1 | adopting at v1.5.1 | native today; Radix per-widget going forward | Playwright + axe | `active` |
-| Uploadarr | to vendor + alias its existing custom properties onto the shared names | already Inter + JetBrains Mono (switch to `latin.css`) | Radix, 8 primitives | gate missing — add | `desired` |
+| Uploadarr | to vendor + alias its existing custom properties onto the shared names | already Inter + JetBrains Mono (switch to the latin slice) | Radix, 8 primitives | gate missing — add | `desired` |
 | ModelDeck | to vendor | to adopt | no library | to add | `desired` |
 | MediaRefinery | Tailwind today — registered exception | — | Headless UI — registered exception | — | `exception` |
 
