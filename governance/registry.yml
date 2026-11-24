@@ -670,3 +670,19 @@ exceptions:
       every consumer repo's existing secret, not just this dispatch path);
       or .github's protect-master ruleset changes in a way that would let a
       Contents:write token bypass required review.
+
+  - id: mediarefinery-tailwind
+    description: >
+      MediaRefinery's frontend stays on Tailwind CSS + Headless UI instead of the org
+      frontend design system (governance/design-system.md: hand-written CSS over the
+      shared token layer, Radix as the only headless widget library). Migrating a
+      Tailwind+Headless-UI codebase onto the shared tokens is a self-contained program
+      with no user-visible payoff for the other apps, so it is deliberately out of the
+      first wave (CognitiveSystems + Uploadarr). MediaRefinery is therefore exempt from
+      design/tokens.shared.css vendoring and from the Radix-only widget rule.
+    owner: automationnexus-app-maintainers
+    review_trigger: >
+      MediaRefinery starts a visual redesign or gains a second frontend surface, or the
+      shared token layer gains a capability (for example a brand palette) that Tailwind
+      cannot express without porting.
+

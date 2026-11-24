@@ -95,6 +95,9 @@ not a defect to silently fix; it's a signal to check whether the
 
 ## See also
 
+- `design-system.md` — the org frontend contract (fixed stack, Radix-only widget policy,
+  shared token rules, adoption status). Its data half is `../design/tokens.shared.css`,
+  the file every React SPA vendors at `src/styles/tokens.shared.css`.
 - `organogram.md` — rendered hierarchy and repo/team/task matrix.
 - `../workspace/CLAUDE.md` — org-root operating protocol for a session opened
   at the workspace root.

@@ -95,6 +95,17 @@ before `qa-gatekeeper` gates the PR. Full agent roster, decision rights, and
 mutation classes are registered in [`governance/registry.yml`](governance/registry.yml)
 under `repositories: .github` and `repo_core_team:`.
 
+## Frontend design system (`design/` + `governance/design-system.md`)
+
+The org's React SPAs share one substrate, and it is defined here, not in any consumer
+repo: `design/tokens.shared.css` (primitive + semantic tokens, vendored by each app at
+`src/styles/tokens.shared.css`) and `governance/design-system.md` (fixed stack, native-first
+/ Radix-only-where-needed widget policy, the Playwright+axe gate, adoption status).
+CognitiveSystems is the reference implementation. Change the shared layer by PR to
+`master` and have consumers re-vendor it — never patch a vendored copy in place, and never
+add a second widget library or CSS framework to a consumer without amending the contract
+first.
+
 ## Org-tier workspace layer (`workspace/`)
 
 `workspace/` is the canonical, versioned source for the AutomationNexus workspace root's
