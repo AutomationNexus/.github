@@ -87,8 +87,9 @@ vitest, hand-written CSS over three-layer custom-property tokens, Inter Variable
 + JetBrains Mono Variable (latin slice, self-hosted — the CSP is
 `default-src 'self'`), native elements first with **Radix Primitives the only
 headless library and only where a widget actually needs one**, inline SVG icons,
-and a Playwright + `@axe-core/playwright` gate at zero violations, both themes,
-1440/1024/390.
+and a Playwright-driven axe-core gate (`@axe-core/playwright` or the test
+language's equivalent binding) at zero violations on the WCAG 2.1 AA tags, both
+themes, 1440/1024/390.
 
 - Canonical: `automationnexus/.github` → `governance/design-system.md` (the
   contract) and `design/tokens.shared.css` (the token file). Consumers vendor
@@ -100,7 +101,8 @@ and a Playwright + `@axe-core/playwright` gate at zero violations, both themes,
   silent fork. Only `mediarefinery-tailwind` is registered today.
 - Adopted (`active`): CognitiveSystems (reference implementation, v1.5.1) and
   Uploadarr (tokens, fonts, Radix boundary, and the CI axe gate at zero
-  violations — `.github` #83). ModelDeck is next at near-zero cost.
+  violations — `.github` #83; its native-first migration of dialogs, checkbox
+  and switch off Radix is still open). ModelDeck is next at near-zero cost.
 - Change it in `.github` by PR (human-merged) and re-vendor — not in a consumer
   repo, and not as a local override. `scripts/sync-design.sh --check` is the
   desired automation; until it exists, re-vendoring is a manual copy with a
