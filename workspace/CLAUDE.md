@@ -98,8 +98,9 @@ and a Playwright + `@axe-core/playwright` gate at zero violations, both themes,
 - One palette: **Glacier**, dark default plus light. A repo needing another
   palette records an `exceptions:` entry in `governance/registry.yml` — never a
   silent fork. Only `mediarefinery-tailwind` is registered today.
-- Adopted: CognitiveSystems (reference implementation, v1.5.1), Uploadarr
-  (tokens, fonts, Radix boundary). ModelDeck is next at near-zero cost.
+- Adopted (`active`): CognitiveSystems (reference implementation, v1.5.1) and
+  Uploadarr (tokens, fonts, Radix boundary, and the CI axe gate at zero
+  violations — `.github` #83). ModelDeck is next at near-zero cost.
 - Change it in `.github` by PR (human-merged) and re-vendor — not in a consumer
   repo, and not as a local override. `scripts/sync-design.sh --check` is the
   desired automation; until it exists, re-vendoring is a manual copy with a
