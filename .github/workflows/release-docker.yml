@@ -119,7 +119,11 @@ jobs:
         run: npm ci
       - working-directory: frontend
         run: npm run build
+      # No job in this workflow downloads this artifact (Build & Push builds from
+      # the checked-out tag alone), so a storage failure here must not turn the
+      # release run red.
       - uses: actions/upload-artifact@v7
+        continue-on-error: true
         with:
           name: spa-dist-${{ github.run_id }}
           path: ${{ inputs.spa-artifact-path }}
@@ -229,13 +233,52 @@ jobs:
           else
             echo "Trivy completed; HIGH/CRITICAL vulnerability findings remain advisory (exit-code=0)." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@v7
+      # Evidence, not the verdict: the scan is advisory (exit-code 0) and nothing
+      # downstream downloads this artifact. When storage is unavailable (for
+      # example the Actions storage quota is used up) the upload must not turn the
+      # job red; the next step keeps the result visible in the run summary instead.
+      - name: Upload scan report
+        id: upload-report
+        uses: actions/upload-artifact@v7
         if: always()
+        continue-on-error: true
         with:
           name: trivy-report-${{ github.run_id }}
           path: trivy-report.json
           if-no-files-found: error
           retention-days: 14
+      - name: Keep the scan result when the report could not be stored
+        if: always() && steps.upload-report.outcome == 'failure'
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          try:
+              with open("trivy-report.json", encoding="utf-8") as handle:
+                  report = json.load(handle)
+          except (OSError, ValueError) as exc:
+              print(f"::error title=No scan report::trivy-report.json is missing or unreadable ({type(exc).__name__}); there is nothing to store or summarize.")
+              sys.exit(1)
+          lines = [
+              "### Scan report was not stored",
+              "",
+              "The report artifact could not be uploaded (for example because the Actions storage quota is used up). The result is summarized here instead.",
+              "",
+          ]
+          if not isinstance(report, dict) or report.get("scan_completed") is False:
+              lines.append("The scan did not complete; see the scan step's log.")
+          else:
+              counts = {"CRITICAL": 0, "HIGH": 0}
+              for result in report.get("Results") or []:
+                  for finding in (result or {}).get("Vulnerabilities") or []:
+                      severity = str((finding or {}).get("Severity", "")).upper()
+                      if severity in counts:
+                          counts[severity] += 1
+              lines.append(f"- CRITICAL: {counts['CRITICAL']}")
+              lines.append(f"- HIGH: {counts['HIGH']}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write("\n".join(lines) + "\n")
+          print("::warning title=Scan report not stored::The report artifact could not be uploaded; see the run summary for the scan result.")
+          PY
 
   publish-release:
     name: Publish GitHub Release
